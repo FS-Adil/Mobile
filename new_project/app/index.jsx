@@ -2,26 +2,27 @@ import { StyleSheet, Text, View, Image } from 'react-native'
 import { Link } from 'expo-router'
 
 import Logo from '../assets/img/icon.png'
+import ThemedView from '../components/ThemedView'
 
 const Home = () => {
     return (
-        <View style={styles.container}>
+        <ThemedView style={styles.container}>
 
             <Image source={Logo} style={[styles.img, {width: 200, height: 200, borderRadius: 10}]} ></Image>
 
-            <Text style={styles.title}>The Number 1</Text>
+            <Text style={[styles.title, {textAlign: 'center'}]}>Стартовая страница для приложения ФинКровля Mobile</Text>
 
-            <Text style={{marginTop: 10, marginBottom: 10}}>Reading List App</Text>
+            <Text style={{marginTop: 40, marginBottom: 5, textAlign: 'center'}}>Доступные страницы для не авторизованных пользователей!</Text>
 
             <Link href="/about" style={[styles.card, {marginTop: 20}]}>
-                About Page
+                Информация о приложении
             </Link>
 
-            <Link href="/contact" style={[styles.card, {marginTop: 20}]}>
-                Contact Page
+            <Link href="/login" style={[styles.card, {marginTop: 20}]}>
+                Страница входа
             </Link>
 
-        </View>
+        </ThemedView>
     )
 }
 
