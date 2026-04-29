@@ -1,10 +1,19 @@
-import { Text, StyleSheet } from "react-native";
+import { Text, StyleSheet, } from "react-native";
 
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 
 import ThemedView from "../../components/ThemedView";
+import ThemedButton from "../../components/ThemedButton";
 
 const Login = () => {
+
+    const router = useRouter();
+
+    const handleSubmit = () => {
+        console.log("Input is life!")
+        router.push('/rolls'); 
+    }
+
     return (
         <ThemedView style={styles.container}>
 
@@ -12,11 +21,22 @@ const Login = () => {
                 Пройдите авторизацию для использования данного приложения!
             </Text>
 
-            <Link href={'/register'} style={[ styles.card, {marginTop: 100}]}>
-                <Text style={{textAlign: 'center'}}>
-                    Пройдите регистрацию если нет учетки!
+            <ThemedButton onPress={handleSubmit}>
+                <Text style={{color: '#f2f2f2', textAlign: 'center'}}>
+                    Вход
                 </Text>
-            </Link>
+            </ThemedButton>
+
+
+            {/* <Text style={{textAlign: 'center', marginTop: 100}}>
+                Пройдите регистрацию если нет учетки!
+            </Text> */}
+
+            {/* <Link href={'/register'} style={[ styles.card, {marginTop: 10}]}>
+                <Text style={{textAlign: 'center'}}>
+                    Регистрация
+                </Text>
+            </Link> */}
 
             <Link href="/" style={[styles.card, {marginTop: 20}]}>
                 <Text style={{textAlign: 'center'}}>
@@ -34,6 +54,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
+        alignItems: 'center'
     },
     title: {
         textAlign: 'center',

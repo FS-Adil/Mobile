@@ -3,8 +3,14 @@ import { Text, StyleSheet } from "react-native";
 import { Link } from "expo-router";
 
 import ThemedView from "../../components/ThemedView";
+import ThemedButton from "../../components/ThemedButton";
 
 const Register = () => {
+
+    const handleSubmit = () => {
+        console.log("Register is life!")
+    }
+
     return (
         <ThemedView style={styles.container}>
 
@@ -12,19 +18,25 @@ const Register = () => {
                 Регистрация пользователя!
             </Text>
 
-            <Text style={{textAlign: 'center'}}>
+            <ThemedButton onPress={handleSubmit}>
+                <Text style={{color: '#f2f2f2', textAlign: 'center'}}>
+                    Регистрация
+                </Text>
+            </ThemedButton>
+
+            {/* <Text style={{textAlign: 'center', marginTop: 100}}>
                 Если у Вас есть учетка, пройдите на страницу входа!
             </Text>
 
-            <Link href={'/login'}  style={[styles.card, {marginTop: 20}]}>
+            <Link href={'/login'}  style={[styles.card, {marginTop: 10}]}>
                 <Text style={{ textAlign: 'center'}}>
                     Страница входа
                 </Text>
-            </Link>
+            </Link> */}
 
-            <Link href="/" style={[styles.card, {marginTop: 20}]}>
+            <Link href="/rolls" style={[styles.card, {marginTop: 20}]}>
                 <Text style={{textAlign: 'center'}}>
-                    Домашняя страница
+                    На Главную
                 </Text>
             </Link>
 
@@ -38,6 +50,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
+        alignItems: 'center'
     },
     title: {
         textAlign: 'center',
