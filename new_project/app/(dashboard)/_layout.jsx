@@ -20,7 +20,8 @@ export default function DashboardLayout() {
                     tabBarStyle: {
                         backgroundColor: theme.navBackground,
                         paddingTop: 5,
-                        height: 130,
+                        paddingBottom: 60,
+                        height: 120,
                     },
                     tabBarActiveTintColor: theme.iconColorFocused,
                     tabBarInactiveTintColor: theme.iconColor,
@@ -30,7 +31,7 @@ export default function DashboardLayout() {
                     name="rolls" 
                     options={{title: 'Рулоны', tabBarIcon: ({focused}) => (
                         <Ionicons
-                            size={24}
+                            size={25}
                             name={focused ? 'document-text' : 'document-text-outline'}
                             color={focused ? theme.iconColorFocused : theme.iconColor}
                         />
