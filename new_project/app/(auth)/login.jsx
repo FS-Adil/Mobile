@@ -6,6 +6,7 @@ import ThemedView from "../../components/ThemedView";
 import ThemedButton from "../../components/ThemedButton";
 import ThemedTextInput from "../../components/ThemedTextInput";
 import { useState } from "react";
+import { useUser } from "../../hooks/useUser";
 
 const Login = () => {
 
@@ -15,8 +16,11 @@ const Login = () => {
 
     const [password, setPassword] = useState('')
 
+    const { user } = useUser()
+
     const handleSubmit = () => {
-        console.log("Input is life!", email, password)
+        console.log("current user ", user)
+        console.log("Input is life! ", email, password)
         router.push('/rolls'); 
     }
 
