@@ -1,28 +1,40 @@
 import { createContext, useState, useId } from "react";
 
+import { loging, logoutg } from "../services/new_api";
+
 export const UserContext = createContext()
 
 export function UserProvider ({ children }) {
 
     const [user, setUser] = useState(null)
 
-    async function login (email, password) {
+    async function login (userName, password) {
+
+        try {
+
+            const response = await loging(userName, password);
+            setUser(response)
+
+        } catch (error) {
+            throw Error(error.message)
+        }
         
     }
 
-    async function register (email, password) {
+    async function register (userName, password) {
 
         try {
-            const id = useId();
             
+
 
         } catch (error) {
             console.log(error.message)
         }
     }
 
-    async function logout (email, password) {
-        
+    async function logout () {
+        logoutg();
+        setUser(null)
     }
 
     return (

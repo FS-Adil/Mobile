@@ -1,10 +1,25 @@
 import ThemedView from "../../components/ThemedView"
+import ThemedButton from "../../components/ThemedButton";
 
 import { StyleSheet, Text } from "react-native";
+import { useUser } from "../../hooks/useUser";
 
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 
 const Profile = () => {
+
+    const router = useRouter();
+
+    const { logout, user } = useUser()
+
+    const handleSubmit = async() => {
+
+            router.push('/');
+            await logout()
+             
+    }
+
+
     return (
         <ThemedView style={styles.container}>
 
@@ -13,22 +28,23 @@ const Profile = () => {
             </Text>
 
             <Text>
-                Имя:
+                Роль: {user?.role || 'Гость'}
             </Text>
 
             <Text>
-                Логин:
+                Логин: {user?.login || 'Не авторизован'}
             </Text>
 
             <Text style={{marginTop: 100}}>
                 Для выхода из учетной записи нажмите кнопку ниже:
             </Text>
 
-            <Link href="/" style={[styles.card, {marginTop: 20}]}>
-                <Text style={{textAlign: 'center'}}>
+
+            <ThemedButton onPress={handleSubmit}>
+                <Text style={{color: '#f2f2f2'}}>
                     Выход
                 </Text>
-            </Link>
+            </ThemedButton>
 
         </ThemedView>
     )

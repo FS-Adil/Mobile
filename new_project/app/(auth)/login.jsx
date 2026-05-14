@@ -1,4 +1,4 @@
-import { Text, StyleSheet, } from "react-native";
+import { Text, StyleSheet, TouchableWithoutFeedback, Keyboard, } from "react-native";
 
 import { Link, useRouter } from "expo-router";
 
@@ -7,70 +7,87 @@ import ThemedButton from "../../components/ThemedButton";
 import ThemedTextInput from "../../components/ThemedTextInput";
 import { useState } from "react";
 import { useUser } from "../../hooks/useUser";
+import { Colors } from "../../constants/Colors";
 
 const Login = () => {
 
     const router = useRouter();
 
-    const [email, setEmail] = useState('')
+    const [userName, setUserName] = useState('')
 
     const [password, setPassword] = useState('')
 
-    const { user } = useUser()
+    const [err, setError] = useState(null)
 
-    const handleSubmit = () => {
-        console.log("current user ", user)
-        console.log("Input is life! ", email, password)
-        router.push('/rolls'); 
+    const { login } = useUser()
+
+    const handleSubmit = async() => {
+
+        setError(null)
+
+        try {
+
+            await login(userName, password)
+            router.push('/rolls'); 
+
+        } catch (error) {
+            setError(error.message)
+        }
     }
 
     return (
-        <ThemedView style={styles.container}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <ThemedView style={styles.container}>
 
-            <Text style={styles.title}>
-                Пройдите авторизацию для использования данного приложения!
-            </Text>
-
-            <ThemedTextInput 
-                style={{ width: '80%', marginBottom: 20 }}
-                placeholder="Email" 
-                keyboardType="email-address"
-                onChangeText={setEmail}
-                value={email}
-            />
-
-            <ThemedTextInput 
-                style={{ width: '80%', marginBottom: 20 }}
-                placeholder="Password" 
-                onChangeText={setPassword}
-                value={password}
-                secureTextEntry
-            />
-
-            <ThemedButton onPress={handleSubmit}>
-                <Text style={{color: '#f2f2f2', textAlign: 'center'}}>
-                    Вход
+                <Text style={styles.title}>
+                    Пройдите авторизацию для использования данного приложения!
                 </Text>
-            </ThemedButton>
+
+                <ThemedTextInput 
+                    style={{ width: '80%', marginBottom: 20 }}
+                    placeholder="Login" 
+                    // keyboardType="email-address"
+                    onChangeText={setUserName}
+                    value={userName}
+                />
+
+                <ThemedTextInput 
+                    style={{ width: '80%', marginBottom: 20 }}
+                    placeholder="Password" 
+                    onChangeText={setPassword}
+                    value={password}
+                    secureTextEntry
+                />
+
+                <ThemedButton onPress={handleSubmit}>
+                    <Text style={{color: '#f2f2f2', textAlign: 'center'}}>
+                        Вход
+                    </Text>
+                </ThemedButton>
 
 
-            {/* <Text style={{textAlign: 'center', marginTop: 100}}>
-                Пройдите регистрацию если нет учетки!
-            </Text> */}
+                {/* <Text style={{textAlign: 'center', marginTop: 100}}>
+                    Пройдите регистрацию если нет учетки!
+                </Text> */}
 
-            {/* <Link href={'/register'} style={[ styles.card, {marginTop: 10}]}>
-                <Text style={{textAlign: 'center'}}>
-                    Регистрация
-                </Text>
-            </Link> */}
+                {/* <Link href={'/register'} style={[ styles.card, {marginTop: 10}]}>
+                    <Text style={{textAlign: 'center'}}>
+                        Регистрация
+                    </Text>
+                </Link> */}
 
-            <Link href="/" style={[styles.card, {marginTop: 20}]}>
-                <Text style={{textAlign: 'center'}}>
-                    Домашняя страница
-                </Text>
-            </Link>
+                {err && <Text style={styles.error}>
+                        {err}
+                    </Text>}
 
-        </ThemedView>
+                <Link href="/" style={[styles.card, {marginTop: 20}]}>
+                    <Text style={{textAlign: 'center'}}>
+                        Домашняя страница
+                    </Text>
+                </Link>
+
+            </ThemedView>
+        </TouchableWithoutFeedback>
     )
 }
 
@@ -94,4 +111,13 @@ const styles = StyleSheet.create({
         borderRadius: 5,
         boxShadow: '4px 4px rgba(0, 0, 0, 0.3)'
     },
+    error: {
+        color: Colors.warning,
+        padding: 10,
+        backgroundColor: '#f5c1c8',
+        borderColor: Colors.warning,
+        borderWidth: 1,
+        borderRadius: 6,
+        marginHorizontal: 10,
+    }
 })

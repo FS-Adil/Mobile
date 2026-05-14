@@ -10,7 +10,7 @@ import { useState } from "react";
 
 const Register = () => {
 
-    const [email, setEmail] = useState('')
+    const [login, setLogin] = useState('')
     
     const [password, setPassword] = useState('')
 
@@ -28,10 +28,10 @@ const Register = () => {
 
                 <ThemedTextInput 
                     style={{ width: '80%', marginBottom: 20 }}
-                    placeholder="Email" 
-                    keyboardType="email-address"
-                    onChangeText={setEmail}
-                    value={email}
+                    placeholder="Login" 
+                    // keyboardType="email-address"
+                    onChangeText={setLogin}
+                    value={login}
                 />
 
                 <ThemedTextInput 
