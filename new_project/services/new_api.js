@@ -1,6 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { tokenStorage } from '../storage/tokenStorage';
+
 import { config } from '../config/env';
 
 const api = axios.create({
@@ -48,22 +50,32 @@ export const loging = async (login, password) => {
 };
 
 // Регистрация нового пользователя (только для админа)
-export const register = async (username, password, role, adminToken) => {
+export const registerg = async (login, password, role) => {
   try {
-    const response = await api.post('/admin/register', {
-      username,
+    // Получаем токен с await
+    const token = await tokenStorage.getToken();
+    
+    // Проверяем наличие токена
+    if (!token) {
+      throw new Error('Не авторизован. Выполните вход сначала.');
+    }
+    
+    const response = await api.post('/admin/register_new', {
+      login,
       password,
       role: role || 'USER',
     }, {
       headers: {
-        Authorization: `Bearer ${adminToken}`,
+        Authorization: `Bearer ${token}`,
       },
     });
     
+    console.log("✅ Registration successful:", response.data);
     return response.data;
+    
   } catch (error) {
-    console.error('Register error:', error.response?.data || error.message);
-    throw new Error(error.response?.data || 'Ошибка регистрации');
+    console.error('❌ Register error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Ошибка регистрации');
   }
 };
 
@@ -86,9 +98,7 @@ export const getUserRole = async () => {
 
 // Выход из системы
 export const logoutg = async () => {
-  await AsyncStorage.removeItem('userToken');
-  await AsyncStorage.removeItem('userRole');
-  await AsyncStorage.removeItem('userName');
+  tokenStorage.removeToken();
 };
 
 export default api;

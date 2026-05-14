@@ -1,6 +1,6 @@
 import { createContext, useState, useId } from "react";
 
-import { loging, logoutg } from "../services/new_api";
+import { loging, logoutg, registerg } from "../services/new_api";
 
 export const UserContext = createContext()
 
@@ -25,10 +25,11 @@ export function UserProvider ({ children }) {
 
         try {
             
-
+            const response = await registerg(userName, password, null)
+            setUser(response)
 
         } catch (error) {
-            console.log(error.message)
+            throw Error(error.message)
         }
     }
 

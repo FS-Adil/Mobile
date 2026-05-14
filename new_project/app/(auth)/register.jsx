@@ -1,21 +1,38 @@
 import { Text, StyleSheet, TouchableWithoutFeedback, Keyboard } from "react-native";
 
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 
 import ThemedView from "../../components/ThemedView";
 import ThemedButton from "../../components/ThemedButton";
 import ThemedTextInput from "../../components/ThemedTextInput";
 
 import { useState } from "react";
+import { useUser } from "../../hooks/useUser";
 
 const Register = () => {
 
-    const [login, setLogin] = useState('')
+    const router = useRouter();
+
+    const [userName, setUserName] = useState('')
     
     const [password, setPassword] = useState('')
 
-    const handleSubmit = () => {
-        console.log("Register is life!")
+    const [err, setError] = useState(null)
+
+    const { user, register } = useUser()
+
+    const handleSubmit = async() => {
+
+        setError(null)
+
+        try {
+
+            await register(userName, password)
+            router.push('/register'); 
+
+        } catch (error) {
+            setError(error.message)
+        }
     }
 
     return (
@@ -30,8 +47,8 @@ const Register = () => {
                     style={{ width: '80%', marginBottom: 20 }}
                     placeholder="Login" 
                     // keyboardType="email-address"
-                    onChangeText={setLogin}
-                    value={login}
+                    onChangeText={setUserName}
+                    value={userName}
                 />
 
                 <ThemedTextInput 
@@ -58,7 +75,7 @@ const Register = () => {
                     </Text>
                 </Link> */}
 
-                <Link href="/rolls" style={[styles.card, {marginTop: 20}]}>
+                <Link href="/create" style={[styles.card, {marginTop: 20}]}>
                     <Text style={{textAlign: 'center'}}>
                         На Главную
                     </Text>
