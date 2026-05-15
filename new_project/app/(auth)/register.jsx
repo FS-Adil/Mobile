@@ -9,6 +9,8 @@ import ThemedTextInput from "../../components/ThemedTextInput";
 import { useState } from "react";
 import { useUser } from "../../hooks/useUser";
 
+import { Colors } from "../../constants/Colors";
+
 const Register = () => {
 
     const router = useRouter();
@@ -18,17 +20,29 @@ const Register = () => {
     const [password, setPassword] = useState('')
 
     const [err, setError] = useState(null)
+    const [success, setSuccess] = useState(null)
 
     const { user, register } = useUser()
 
     const handleSubmit = async() => {
 
+        if (!userName.trim() || !password.trim()) {
+            setSuccess(null)
+            setError('Пожалуйста, заполните все поля!')
+            return
+        }
+
         setError(null)
+        setSuccess(null)
 
         try {
 
             await register(userName, password)
-            router.push('/register'); 
+
+            setSuccess('Регистрация прошла успешно!')
+
+            setUserName('')
+            setPassword('')
 
         } catch (error) {
             setError(error.message)
@@ -75,6 +89,17 @@ const Register = () => {
                     </Text>
                 </Link> */}
 
+                {success && (
+                    <Text style={styles.success}>
+                        {success}
+                    </Text>
+                )}
+
+
+                {err && <Text style={styles.error}>
+                                        {err}
+                                    </Text>}
+
                 <Link href="/create" style={[styles.card, {marginTop: 20}]}>
                     <Text style={{textAlign: 'center'}}>
                         На Главную
@@ -99,11 +124,31 @@ const styles = StyleSheet.create({
         fontSize: 18,
         marginBottom: 30,
     },
-        card: {
+    card: {
         backgroundColor: '#eee',
         padding: 20,
         margin: 20,
         borderRadius: 5,
         boxShadow: '4px 4px rgba(0, 0, 0, 0.3)'
+    },
+    error: {
+        color: Colors.warning,
+        padding: 10,
+        backgroundColor: '#f5c1c8',
+        borderColor: Colors.warning,
+        borderWidth: 1,
+        borderRadius: 6,
+        marginHorizontal: 10,
+    },
+    success: {
+        color: '#155724',
+        padding: 10,
+        backgroundColor: '#d4edda',
+        borderColor: '#28a745',
+        borderWidth: 1,
+        borderRadius: 6,
+        marginHorizontal: 10,
+        marginTop: 20,
+        textAlign: 'center'
     },
 })

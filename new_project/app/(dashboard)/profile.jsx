@@ -6,11 +6,32 @@ import { useUser } from "../../hooks/useUser";
 
 import { useRouter } from "expo-router";
 
+import { useState, useEffect } from "react";
+
+import { tokenStorage } from "../../storage/tokenStorage";
+
+
 const Profile = () => {
+
+    const [userRole, setUserRole] = useState(null);
+    const [userName, setUserName] = useState(null);
+
+    useEffect(() => {
+        const loadUserData = async () => {
+        const { role, username } = await tokenStorage.getUserData();
+        setUserRole(role);
+        setUserName(username);
+        console.log('User role:', role);
+        console.log('User name:', username);
+        };
+        
+        loadUserData();
+    }, []);
 
     const router = useRouter();
 
-    const { logout, user } = useUser()
+    const { logout } = useUser()
+
 
     const handleSubmit = async() => {
 
@@ -18,7 +39,6 @@ const Profile = () => {
             await logout()
              
     }
-
 
     return (
         <ThemedView style={styles.container}>
@@ -28,11 +48,13 @@ const Profile = () => {
             </Text>
 
             <Text>
-                Роль: {user?.role || 'Гость'}
+                {/* Роль: {user?.role || 'Гость'} */}
+                Роль: {userRole || 'Гость'}
             </Text>
 
             <Text>
-                Логин: {user?.login || 'Не авторизован'}
+                {/* Логин: {user?.login || 'Не авторизован'} */}
+                Логин: {userName || 'Не авторизован'}
             </Text>
 
             <Text style={{marginTop: 100}}>

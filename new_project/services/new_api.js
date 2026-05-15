@@ -60,7 +60,7 @@ export const registerg = async (login, password, role) => {
       throw new Error('Не авторизован. Выполните вход сначала.');
     }
     
-    const response = await api.post('/admin/register_new', {
+    const response = await api.post('/admin/register', {
       login,
       password,
       role: role || 'USER',
@@ -82,7 +82,7 @@ export const registerg = async (login, password, role) => {
 // Получение списка товаров
 export const getProducts = async () => {
   try {
-    const response = await api.get('/products');
+    const response = await api.get('/roll/products');
     return response.data;
   } catch (error) {
     console.error('Get products error:', error.response?.data || error.message);
