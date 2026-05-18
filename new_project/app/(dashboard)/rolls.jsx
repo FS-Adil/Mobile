@@ -1,5 +1,5 @@
 import ThemedView from "../../components/ThemedView"
-import { StyleSheet, Text, SectionList, View, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator, Modal } from "react-native";
+import { StyleSheet, Text, SectionList, View, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator, Modal, KeyboardAvoidingView, Keyboard } from "react-native";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getProducts } from "../../services/new_api";
 import { Colors } from "../../constants/Colors";
@@ -17,14 +17,37 @@ const Rolls = () => {
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState(0);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
     
     // Состояния для отслеживания свернутых групп
     const [collapsedOrganizations, setCollapsedOrganizations] = useState({});
     const [collapsedManufacturers, setCollapsedManufacturers] = useState({});
 
-    // Ref для хранения sections
+    // Ref для хранения sections и searchInput
     const sectionsRef = useRef([]);
     const progressInterval = useRef(null);
+    const searchInputRef = useRef(null);
+
+    // Отслеживание клавиатуры
+    useEffect(() => {
+        const keyboardDidShowListener = Keyboard.addListener(
+            'keyboardDidShow',
+            (e) => {
+                setKeyboardHeight(e.endCoordinates.height);
+            }
+        );
+        const keyboardDidHideListener = Keyboard.addListener(
+            'keyboardDidHide',
+            () => {
+                setKeyboardHeight(0);
+            }
+        );
+
+        return () => {
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
+    }, []);
 
     // Функция для симуляции прогресса загрузки
     const startProgressSimulation = () => {
@@ -34,7 +57,7 @@ const Rolls = () => {
         progressInterval.current = setInterval(() => {
             progress += Math.random() * 15;
             if (progress > 90) {
-                progress = 90; // Держим на 90% пока реальная загрузка не завершится
+                progress = 90;
                 clearInterval(progressInterval.current);
             }
             setLoadingProgress(Math.min(progress, 90));
@@ -159,7 +182,7 @@ const Rolls = () => {
     const sections = useMemo(() => {
         const filteredProducts = searchProducts(allProducts, searchQuery);
         const grouped = groupProducts(filteredProducts);
-        sectionsRef.current = grouped; // Сохраняем в ref
+        sectionsRef.current = grouped;
         return grouped;
     }, [allProducts, searchQuery]);
 
@@ -351,7 +374,6 @@ const Rolls = () => {
                 const isCollapsed = collapsedManufacturers[manufacturerKey];
                 const isOrgCollapsed = collapsedOrganizations[section.title];
                 
-                // Если организация свернута, не показываем производителей
                 if (isOrgCollapsed) return null;
                 
                 return (
@@ -430,15 +452,20 @@ const Rolls = () => {
         return null;
     };
 
-    // Очистка поиска
+    // Очистка поиска и скрытие клавиатуры
     const clearSearch = () => {
         setSearchQuery('');
+        Keyboard.dismiss();
+    };
+
+    // Скрытие клавиатуры при нажатии вне поля ввода
+    const dismissKeyboard = () => {
+        Keyboard.dismiss();
     };
 
     useEffect(() => {
         loadProducts();
         
-        // Очистка интервала при размонтировании
         return () => {
             if (progressInterval.current) {
                 clearInterval(progressInterval.current);
@@ -461,91 +488,111 @@ const Rolls = () => {
                 <Ionicons name="refresh" size={24} color="#fff" />
             </TouchableOpacity>
 
-            {/* Основной контент */}
-            <SectionList
-                sections={sections}
-                renderItem={renderSectionItem}
-                renderSectionHeader={renderSectionHeader}
-                ListHeaderComponent={
-                    <>
-                        <Text style={styles.heading}>Список рулонов</Text>
-                        {searchResultsCount !== null && (
-                            <Text style={styles.searchResults}>
-                                Найдено: {searchResultsCount} позиций
-                            </Text>
-                        )}
-                        {sections.length > 0 && (
-                            <View style={styles.controlsContainer}>
-                                <TouchableOpacity 
-                                    style={styles.controlButton}
-                                    onPress={collapseAll}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="contract-outline" size={16} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Свернуть все</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    style={[styles.controlButton, styles.expandButton]}
-                                    onPress={expandAll}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="expand-outline" size={16} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Развернуть все</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </>
-                }
-                keyExtractor={(item, index) => item.title + index}
-                contentContainerStyle={[
-                    styles.listContainer,
-                    isSearchFocused && styles.listContainerWithKeyboard
-                ]}
-                ListEmptyComponent={
-                    <Text style={styles.emptyText}>
-                        {searchQuery ? 'По вашему запросу ничего не найдено' : 'Товары не найдены'}
-                    </Text>
-                }
-                stickySectionHeadersEnabled={true}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-            />
+            <KeyboardAvoidingView 
+                style={styles.keyboardAvoidingContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
+                {/* Основной контент */}
+                <SectionList
+                    sections={sections}
+                    renderItem={renderSectionItem}
+                    renderSectionHeader={renderSectionHeader}
+                    ListHeaderComponent={
+                        <>
+                            <Text style={styles.heading}>Список рулонов</Text>
+                            {searchResultsCount !== null && (
+                                <Text style={styles.searchResults}>
+                                    Найдено: {searchResultsCount} позиций
+                                </Text>
+                            )}
+                            {sections.length > 0 && (
+                                <View style={styles.controlsContainer}>
+                                    <TouchableOpacity 
+                                        style={styles.controlButton}
+                                        onPress={collapseAll}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons name="contract-outline" size={16} color="#fff" />
+                                        <Text style={styles.controlButtonText}>Свернуть все</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.controlButton, styles.expandButton]}
+                                        onPress={expandAll}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons name="expand-outline" size={16} color="#fff" />
+                                        <Text style={styles.controlButtonText}>Развернуть все</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
+                    }
+                    keyExtractor={(item, index) => item.title + index}
+                    contentContainerStyle={[
+                        styles.listContainer,
+                        keyboardHeight > 0 && { paddingBottom: 0 }
+                    ]}
+                    ListEmptyComponent={
+                        <Text style={styles.emptyText}>
+                            {searchQuery ? 'По вашему запросу ничего не найдено' : 'Товары не найдены'}
+                        </Text>
+                    }
+                    stickySectionHeadersEnabled={true}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    onScrollBeginDrag={dismissKeyboard}
+                />
 
-            {/* Окно поиска в нижней части */}
-            <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused]}>
-                <View style={styles.searchInputWrapper}>
-                    <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Поиск по всем параметрам..."
-                        placeholderTextColor="#999"
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        onFocus={() => setIsSearchFocused(true)}
-                        onBlur={() => setIsSearchFocused(false)}
-                        autoCorrect={false}
-                        clearButtonMode="while-editing"
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                            <Ionicons name="close-circle" size={20} color="#999" />
-                        </TouchableOpacity>
+                {/* Окно поиска в нижней части */}
+                <View style={[
+                    styles.searchContainer, 
+                    isSearchFocused && styles.searchContainerFocused,
+                    keyboardHeight > 0 && { 
+                        paddingBottom: Platform.OS === 'ios' ? 10 : 10,
+                        marginBottom: 0
+                    }
+                ]}>
+                    <View style={styles.searchInputWrapper}>
+                        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+                        <TextInput
+                            ref={searchInputRef}
+                            style={styles.searchInput}
+                            placeholder="Поиск по всем параметрам..."
+                            placeholderTextColor="#999"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            onFocus={() => setIsSearchFocused(true)}
+                            onBlur={() => setIsSearchFocused(false)}
+                            autoCorrect={false}
+                            clearButtonMode="while-editing"
+                            returnKeyType="search"
+                            onSubmitEditing={dismissKeyboard}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                                <Ionicons name="close-circle" size={20} color="#999" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    
+                    {isSearchFocused && (
+                        <View style={styles.searchHint}>
+                            <Text style={styles.searchHintText}>
+                                Введите часть названия, производителя или характеристики через пробел
+                            </Text>
+                        </View>
                     )}
                 </View>
-                
-                {isSearchFocused && (
-                    <View style={styles.searchHint}>
-                        <Text style={styles.searchHintText}>
-                            Введите часть названия, производителя или характеристики через пробел
-                        </Text>
-                    </View>
-                )}
-            </View>
+            </KeyboardAvoidingView>
 
             {/* Ошибка */}
             {err && (
                 <TouchableOpacity 
-                    style={styles.error}
+                    style={[
+                        styles.error,
+                        keyboardHeight > 0 && { bottom: keyboardHeight + 10 }
+                    ]}
                     onPress={() => setError(null)}
                     activeOpacity={0.8}
                 >
@@ -566,7 +613,9 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
-        marginTop: 40
+    },
+    keyboardAvoidingContainer: {
+        flex: 1,
     },
     refreshButton: {
         position: 'absolute',
@@ -937,9 +986,6 @@ const styles = StyleSheet.create({
     },
     listContainer: {
         paddingBottom: 80,
-    },
-    listContainerWithKeyboard: {
-        paddingBottom: 120,
     },
     emptyText: {
         textAlign: 'center',
