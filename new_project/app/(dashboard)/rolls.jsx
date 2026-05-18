@@ -1,5 +1,5 @@
 import ThemedView from "../../components/ThemedView"
-import { StyleSheet, Text, SectionList, View, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator, Modal, KeyboardAvoidingView, Keyboard } from "react-native";
+import { StyleSheet, Text, SectionList, View, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator, Modal, KeyboardAvoidingView, Keyboard, ScrollView } from "react-native";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getProducts } from "../../services/new_api";
 import { Colors } from "../../constants/Colors";
@@ -106,9 +106,11 @@ const Rolls = () => {
                 product.manufacturer,
                 product.organization,
                 product.batch,
-                product.price?.toString(),
-                product.quantity?.toString(),
-                product.arrivalDate ? new Date(product.arrivalDate).toLocaleDateString() : '',
+                product.pricePerSquareMeter?.toString(),
+                product.pricePerTon?.toString(),
+                product.areaSquareMeters?.toString(),
+                product.weightTons?.toString(),
+                product.batchDate ? new Date(product.batchDate).toLocaleDateString() : '',
                 `${product.name} ${product.manufacturer}`,
                 `${product.manufacturer} ${product.name}`,
                 `${product.name} ${product.organization}`,
@@ -316,52 +318,95 @@ const Rolls = () => {
         );
     };
 
+    // Компонент таблицы для отображения данных рулона
+    const RollTable = ({ items }) => {
+        const totalArea = items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0);
+        const totalWeight = items.reduce((sum, item) => sum + (item.weightTons || 0), 0);
+        const totalPricePerSqMeter = items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0);
+        const totalPricePerTon = items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0);
+
+        return (
+            <View style={styles.tableContainer}>
+                {/* Заголовок таблицы */}
+                <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderCell, styles.batchColumn]}>Партия</Text>
+                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена м²</Text>
+                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена тонна</Text>
+                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток м²</Text>
+                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток тонн</Text>
+                    <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
+                </View>
+
+                {/* Строки таблицы */}
+                {items.map((item, index) => (
+                    <View 
+                        key={item.id || index} 
+                        style={[
+                            styles.tableRow,
+                            index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
+                        ]}
+                    >
+                        <Text style={[styles.tableCell, styles.batchColumn]}>
+                            {item.batch || 'Н/Д'}
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]}>
+                            {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]}>
+                            {item.pricePerTon?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]}>
+                            {item.areaSquareMeters?.toLocaleString() || 0} м²
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]}>
+                            {item.weightTons?.toFixed(3) || 0} т
+                        </Text>
+                        <Text style={[styles.tableCell, styles.dateColumn]}>
+                            {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
+                        </Text>
+                    </View>
+                ))}
+
+                {/* Итоговая строка */}
+                <View style={styles.totalTableRow}>
+                    <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
+                        Итого:
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                        {totalPricePerSqMeter.toLocaleString()} ₽
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                        {totalPricePerTon.toLocaleString()} ₽
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                        {totalArea.toLocaleString()} м²
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                        {totalWeight.toFixed(3)} т
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.dateColumn]} />
+                </View>
+            </View>
+        );
+    };
+
     // Компонент для отображения одного рулона
     const RollItem = ({ items, rollName }) => {
-        const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const totalPrice = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
-        
         return (
             <View style={styles.rollCard}>
                 <View style={styles.rollNameContainer}>
                     <Ionicons name="document-text-outline" size={18} color="#3498db" style={styles.rollIcon} />
                     <Text style={styles.rollName}>{rollName}</Text>
-                </View>
-                {items.map((item, index) => (
-                    <View key={item.id || index} style={styles.itemDetail}>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Партия:</Text>
-                            <Text style={styles.detailValue}>{item.batch || 'Н/Д'}</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Цена:</Text>
-                            <Text style={styles.detailValue}>{item.price?.toLocaleString() || 0} ₽</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Остаток:</Text>
-                            <Text style={[styles.detailValue, item.quantity < 10 && styles.lowStock]}>
-                                {item.quantity || 0} шт.
-                            </Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Дата поступления:</Text>
-                            <Text style={styles.detailValue}>
-                                {item.arrivalDate ? new Date(item.arrivalDate).toLocaleDateString() : 'Н/Д'}
-                            </Text>
-                        </View>
-                        {index < items.length - 1 && <View style={styles.separator} />}
-                    </View>
-                ))}
-                <View style={styles.totalRow}>
-                    <View style={styles.totalItem}>
-                        <Text style={styles.totalLabel}>Общий остаток:</Text>
-                        <Text style={styles.totalValue}>{totalQuantity} шт.</Text>
-                    </View>
-                    <View style={styles.totalItem}>
-                        <Text style={styles.totalLabel}>Общая стоимость:</Text>
-                        <Text style={styles.totalValue}>{totalPrice.toLocaleString()} ₽</Text>
+                    <View style={styles.rollBadge}>
+                        <Text style={styles.rollBadgeText}>
+                            {items.length} парт.
+                        </Text>
                     </View>
                 </View>
+                
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <RollTable items={items} />
+                </ScrollView>
             </View>
         );
     };
@@ -613,6 +658,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
+        marginTop: 30
     },
     keyboardAvoidingContainer: {
         flex: 1,
@@ -841,10 +887,10 @@ const styles = StyleSheet.create({
     rollNameContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 15,
         borderBottomWidth: 1,
         borderBottomColor: '#ecf0f1',
-        paddingBottom: 5,
+        paddingBottom: 10,
     },
     rollIcon: {
         marginRight: 8,
@@ -853,60 +899,93 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#2c3e50',
+        flex: 1,
     },
-    itemDetail: {
-        marginBottom: 10,
+    rollBadge: {
+        backgroundColor: '#ebf5fb',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginLeft: 10,
     },
-    detailRow: {
+    rollBadgeText: {
+        fontSize: 12,
+        color: '#3498db',
+        fontWeight: '500',
+    },
+    // Стили для таблицы
+    tableContainer: {
+        minWidth: 580,
+    },
+    tableHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        backgroundColor: '#34495e',
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 5,
         marginBottom: 5,
     },
-    detailLabel: {
-        fontSize: 14,
-        color: '#7f8c8d',
-        flex: 1,
-    },
-    detailValue: {
-        fontSize: 14,
-        color: '#2c3e50',
-        fontWeight: '500',
-        flex: 1,
-        textAlign: 'right',
-    },
-    lowStock: {
-        color: '#e74c3c',
+    tableHeaderCell: {
+        color: '#fff',
+        fontSize: 11,
         fontWeight: 'bold',
+        textAlign: 'center',
     },
-    separator: {
-        height: 1,
-        backgroundColor: '#ecf0f1',
-        marginVertical: 8,
-    },
-    totalRow: {
+    tableRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 10,
-        paddingTop: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 5,
+        borderBottomWidth: 1,
+        borderBottomColor: '#ecf0f1',
+    },
+    tableRowEven: {
+        backgroundColor: '#fff',
+    },
+    tableRowOdd: {
+        backgroundColor: '#f8f9fa',
+    },
+    tableCell: {
+        fontSize: 12,
+        color: '#2c3e50',
+        textAlign: 'center',
+    },
+    batchColumn: {
+        flex: 2,
+        minWidth: 70,
+    },
+    priceColumn: {
+        flex: 2,
+        minWidth: 90,
+    },
+    measureColumn: {
+        flex: 2,
+        minWidth: 90,
+    },
+    dateColumn: {
+        flex: 2,
+        minWidth: 90,
+    },
+    totalTableRow: {
+        flexDirection: 'row',
+        backgroundColor: '#ebf5fb',
+        paddingVertical: 12,
+        paddingHorizontal: 5,
+        borderRadius: 8,
+        marginTop: 5,
         borderTopWidth: 2,
         borderTopColor: '#3498db',
     },
-    totalItem: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    totalLabel: {
+    totalTableCell: {
         fontSize: 12,
         fontWeight: 'bold',
-        color: '#7f8c8d',
-        marginBottom: 2,
+        textAlign: 'center',
     },
-    totalValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#27ae60',
+    totalText: {
+        color: '#2c3e50',
+    },
+    totalMeasureText: {
+        color: '#2980b9',
+        fontSize: 13,
     },
     searchContainer: {
         backgroundColor: '#fff',
