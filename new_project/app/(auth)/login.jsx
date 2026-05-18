@@ -28,7 +28,7 @@ const Login = () => {
         try {
 
             await login(userName, password)
-            router.push('/rolls'); 
+            router.push('/profile'); 
 
         } catch (error) {
             setError(error.message)
