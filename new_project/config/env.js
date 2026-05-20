@@ -13,4 +13,4 @@ const environments = {
 // Переключение окружения здесь
 const currentEnv = 'production'; // меняйте на 'staging' или 'production'
 
-export const config = environments[currentEnv];ш
+export const config = environments[currentEnv];
