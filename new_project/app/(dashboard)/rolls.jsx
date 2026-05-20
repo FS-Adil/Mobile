@@ -22,9 +22,9 @@ import { Colors } from "../../constants/Colors";
 import { Ionicons } from '@expo/vector-icons';
 
 // Включаем LayoutAnimation для Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+//     UIManager.setLayoutAnimationEnabledExperimental(true);
+// }
 
 // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (вынесены из компонента) ============
 
