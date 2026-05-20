@@ -1,6 +1,22 @@
-import ThemedView from "../../components/ThemedView"
-import { StyleSheet, Text, SectionList, View, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator, Modal, KeyboardAvoidingView, Keyboard, ScrollView } from "react-native";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import ThemedView from "../../components/ThemedView";
+import { 
+    StyleSheet, 
+    Text, 
+    SectionList, 
+    View, 
+    TextInput, 
+    TouchableOpacity, 
+    LayoutAnimation, 
+    Platform, 
+    UIManager, 
+    ActivityIndicator, 
+    Modal, 
+    KeyboardAvoidingView, 
+    Keyboard, 
+    ScrollView,
+    InteractionManager 
+} from "react-native";
 import { getProducts } from "../../services/new_api";
 import { Colors } from "../../constants/Colors";
 import { Ionicons } from '@expo/vector-icons';
@@ -10,8 +26,324 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (вынесены из компонента) ============
+
+const normalizeText = (text) => {
+    return text?.toString().toLowerCase().replace(/\s+/g, ' ').trim() || '';
+};
+
+const getSearchTokens = (query) => {
+    return normalizeText(query)
+        .split(' ')
+        .filter(token => token.length > 0);
+};
+
+const containsAllTokens = (text, tokens) => {
+    const normalizedText = normalizeText(text);
+    return tokens.every(token => normalizedText.includes(token));
+};
+
+// Группировка продуктов (вызывается ОДИН раз при загрузке)
+const groupProducts = (products) => {
+    const grouped = {};
+
+    // Первый проход - группируем
+    for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        const org = product.organization || 'Без организации';
+        const manufacturer = product.manufacturer || 'Без производителя';
+        const rollName = product.name || 'Без названия';
+
+        if (!grouped[org]) grouped[org] = {};
+        if (!grouped[org][manufacturer]) grouped[org][manufacturer] = {};
+        if (!grouped[org][manufacturer][rollName]) grouped[org][manufacturer][rollName] = [];
+        
+        grouped[org][manufacturer][rollName].push(product);
+    }
+
+    // Второй проход - формируем секции
+    const sectionsData = [];
+    const orgs = Object.keys(grouped).sort();
+    
+    for (let o = 0; o < orgs.length; o++) {
+        const org = orgs[o];
+        const manufacturers = grouped[org];
+        const manufacturerData = [];
+        const manufKeys = Object.keys(manufacturers).sort();
+        
+        for (let m = 0; m < manufKeys.length; m++) {
+            const manufacturer = manufKeys[m];
+            const rollNames = manufacturers[manufacturer];
+            const rollData = [];
+            const rollKeys = Object.keys(rollNames).sort();
+            
+            for (let r = 0; r < rollKeys.length; r++) {
+                const rollName = rollKeys[r];
+                const items = rollNames[rollName];
+                
+                rollData.push({
+                    title: rollName,
+                    data: [items],
+                    type: 'roll'
+                });
+            }
+            
+            if (rollData.length > 0) {
+                manufacturerData.push({
+                    title: manufacturer,
+                    data: rollData,
+                    type: 'manufacturer',
+                    organizationName: org
+                });
+            }
+        }
+        
+        if (manufacturerData.length > 0) {
+            sectionsData.push({
+                title: org,
+                data: manufacturerData,
+                type: 'organization'
+            });
+        }
+    }
+
+    return sectionsData;
+};
+
+// Фильтрация секций для поиска
+const filterSections = (sections, query) => {
+    if (!query.trim()) return sections;
+    
+    const tokens = getSearchTokens(query);
+    if (tokens.length === 0) return sections;
+    
+    const filtered = [];
+    
+    for (let s = 0; s < sections.length; s++) {
+        const org = sections[s];
+        const filteredManuf = [];
+        
+        for (let m = 0; m < org.data.length; m++) {
+            const manuf = org.data[m];
+            const filteredRolls = [];
+            
+            for (let r = 0; r < manuf.data.length; r++) {
+                const roll = manuf.data[r];
+                const items = roll.data[0];
+                
+                // Проверяем, подходит ли рулон под поиск
+                let matches = false;
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const searchableText = [
+                        roll.title,
+                        manuf.title,
+                        org.title,
+                        item.name,
+                        item.manufacturer,
+                        item.organization,
+                        item.batch,
+                        item.pricePerSquareMeter?.toString(),
+                        item.pricePerTon?.toString(),
+                        item.areaSquareMeters?.toString(),
+                        item.weightTons?.toString(),
+                        item.batchDate ? new Date(item.batchDate).toLocaleDateString() : '',
+                    ].join(' ');
+                    
+                    if (containsAllTokens(searchableText, tokens)) {
+                        matches = true;
+                        break;
+                    }
+                }
+                
+                if (matches) {
+                    filteredRolls.push(roll);
+                }
+            }
+            
+            if (filteredRolls.length > 0) {
+                filteredManuf.push({
+                    ...manuf,
+                    data: filteredRolls
+                });
+            }
+        }
+        
+        if (filteredManuf.length > 0) {
+            filtered.push({
+                ...org,
+                data: filteredManuf
+            });
+        }
+    }
+    
+    return filtered;
+};
+
+// ============ КОМПОНЕНТ ТАБЛИЦЫ ============
+
+const RollTable = React.memo(({ items }) => {
+    const totalArea = items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0);
+    const totalWeight = items.reduce((sum, item) => sum + (item.weightTons || 0), 0);
+    const totalPricePerSqMeter = items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0);
+    const totalPricePerTon = items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0);
+
+    return (
+        <View style={styles.tableContainer}>
+            <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderCell, styles.batchColumn]}>Партия</Text>
+                <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена м²</Text>
+                <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена тонна</Text>
+                <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток м²</Text>
+                <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток тонн</Text>
+                <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
+            </View>
+
+            {items.map((item, index) => (
+                <View 
+                    key={item.id || index} 
+                    style={[
+                        styles.tableRow,
+                        index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
+                    ]}
+                >
+                    <Text style={[styles.tableCell, styles.batchColumn]}>
+                        {item.batch || 'Н/Д'}
+                    </Text>
+                    <Text style={[styles.tableCell, styles.priceColumn]}>
+                        {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
+                    </Text>
+                    <Text style={[styles.tableCell, styles.priceColumn]}>
+                        {item.pricePerTon?.toLocaleString() || 0} ₽
+                    </Text>
+                    <Text style={[styles.tableCell, styles.measureColumn]}>
+                        {item.areaSquareMeters?.toLocaleString() || 0} м²
+                    </Text>
+                    <Text style={[styles.tableCell, styles.measureColumn]}>
+                        {item.weightTons?.toFixed(3) || 0} т
+                    </Text>
+                    <Text style={[styles.tableCell, styles.dateColumn]}>
+                        {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
+                    </Text>
+                </View>
+            ))}
+
+            <View style={styles.totalTableRow}>
+                <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
+                    Итого:
+                </Text>
+                <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                    {totalPricePerSqMeter.toLocaleString()} ₽
+                </Text>
+                <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                    {totalPricePerTon.toLocaleString()} ₽
+                </Text>
+                <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                    {totalArea.toLocaleString()} м²
+                </Text>
+                <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                    {totalWeight.toFixed(3)} т
+                </Text>
+                <Text style={[styles.totalTableCell, styles.dateColumn]} />
+            </View>
+        </View>
+    );
+});
+
+// ============ КОМПОНЕНТ РУЛОНА ============
+
+const RollItem = React.memo(({ items, rollName }) => {
+    return (
+        <View style={styles.rollCard}>
+            <View style={styles.rollNameContainer}>
+                <Ionicons name="document-text-outline" size={18} color="#3498db" style={styles.rollIcon} />
+                <Text style={styles.rollName}>{rollName}</Text>
+                <View style={styles.rollBadge}>
+                    <Text style={styles.rollBadgeText}>
+                        {items.length} парт.
+                    </Text>
+                </View>
+            </View>
+            
+            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                <RollTable items={items} />
+            </ScrollView>
+        </View>
+    );
+});
+
+// ============ КОМПОНЕНТ КАРУСЕЛИ ЗАГРУЗКИ ============
+
+const LoadingCarousel = React.memo(({ isRefreshing, loadingProgress }) => {
+    const carouselItems = [
+        { icon: "server-outline", text: "Подключение к серверу..." },
+        { icon: "cloud-download-outline", text: "Загрузка данных..." },
+        { icon: "cube-outline", text: "Обработка рулонов..." },
+        { icon: "layers-outline", text: "Группировка..." },
+        { icon: "checkmark-circle-outline", text: "Завершение..." },
+    ];
+
+    const currentStep = Math.floor((loadingProgress / 100) * carouselItems.length);
+    const currentItem = carouselItems[Math.min(currentStep, carouselItems.length - 1)];
+
+    if (!isRefreshing) return null;
+
+    return (
+        <Modal
+            transparent={true}
+            animationType="fade"
+            visible={isRefreshing}
+            onRequestClose={() => {}}
+        >
+            <View style={styles.loadingOverlay}>
+                <View style={styles.loadingCard}>
+                    <View style={styles.carouselContainer}>
+                        <View style={styles.iconContainer}>
+                            <Ionicons 
+                                name={currentItem.icon} 
+                                size={48} 
+                                color="#3498db" 
+                            />
+                        </View>
+                        
+                        <Text style={styles.loadingText}>{currentItem.text}</Text>
+                        
+                        <View style={styles.progressBarContainer}>
+                            <View style={[styles.progressBar, { width: `${loadingProgress}%` }]} />
+                        </View>
+                        
+                        <Text style={styles.progressText}>
+                            {Math.round(loadingProgress)}%
+                        </Text>
+                        
+                        <ActivityIndicator 
+                            size="small" 
+                            color="#3498db" 
+                            style={styles.spinner}
+                        />
+                    </View>
+                    
+                    <View style={styles.loadingDots}>
+                        {carouselItems.map((_, index) => (
+                            <View 
+                                key={index}
+                                style={[
+                                    styles.dot,
+                                    index === Math.min(currentStep, carouselItems.length - 1) && styles.activeDot
+                                ]}
+                            />
+                        ))}
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+});
+
+// ============ ГЛАВНЫЙ КОМПОНЕНТ ============
+
 const Rolls = () => {
-    const [allProducts, setAllProducts] = useState([]);
+    const [sections, setSections] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [err, setError] = useState(null);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -19,28 +351,23 @@ const Rolls = () => {
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     
-    // Состояния для отслеживания свернутых групп
     const [collapsedOrganizations, setCollapsedOrganizations] = useState({});
     const [collapsedManufacturers, setCollapsedManufacturers] = useState({});
 
-    // Ref для хранения sections и searchInput
-    const sectionsRef = useRef([]);
     const progressInterval = useRef(null);
     const searchInputRef = useRef(null);
+    const allSectionsRef = useRef([]);
+    const isMounted = useRef(true);
 
     // Отслеживание клавиатуры
     useEffect(() => {
         const keyboardDidShowListener = Keyboard.addListener(
             'keyboardDidShow',
-            (e) => {
-                setKeyboardHeight(e.endCoordinates.height);
-            }
+            (e) => setKeyboardHeight(e.endCoordinates.height)
         );
         const keyboardDidHideListener = Keyboard.addListener(
             'keyboardDidHide',
-            () => {
-                setKeyboardHeight(0);
-            }
+            () => setKeyboardHeight(0)
         );
 
         return () => {
@@ -49,8 +376,18 @@ const Rolls = () => {
         };
     }, []);
 
-    // Функция для симуляции прогресса загрузки
-    const startProgressSimulation = () => {
+    // Очистка при размонтировании
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+            if (progressInterval.current) {
+                clearInterval(progressInterval.current);
+            }
+        };
+    }, []);
+
+    // Симуляция прогресса загрузки
+    const startProgressSimulation = useCallback(() => {
         setLoadingProgress(0);
         let progress = 0;
         
@@ -60,142 +397,91 @@ const Rolls = () => {
                 progress = 90;
                 clearInterval(progressInterval.current);
             }
-            setLoadingProgress(Math.min(progress, 90));
+            if (isMounted.current) {
+                setLoadingProgress(Math.min(progress, 90));
+            }
         }, 300);
-    };
+    }, []);
 
-    const completeProgress = () => {
+    const completeProgress = useCallback(() => {
         if (progressInterval.current) {
             clearInterval(progressInterval.current);
         }
-        setLoadingProgress(100);
-        setTimeout(() => {
-            setIsRefreshing(false);
-            setLoadingProgress(0);
-        }, 500);
-    };
-
-    // Функция для нормализации текста
-    const normalizeText = (text) => {
-        return text?.toString().toLowerCase().replace(/\s+/g, ' ').trim() || '';
-    };
-
-    // Функция для разбиения поискового запроса на токены
-    const getSearchTokens = (query) => {
-        return normalizeText(query)
-            .split(' ')
-            .filter(token => token.length > 0);
-    };
-
-    // Функция для проверки, содержит ли текст все токены
-    const containsAllTokens = (text, tokens) => {
-        const normalizedText = normalizeText(text);
-        return tokens.every(token => normalizedText.includes(token));
-    };
-
-    // Функция поиска с умным сопоставлением
-    const searchProducts = (products, query) => {
-        if (!query.trim()) return products;
-
-        const tokens = getSearchTokens(query);
-        if (tokens.length === 0) return products;
-
-        return products.filter(product => {
-            const searchableText = [
-                product.name,
-                product.manufacturer,
-                product.organization,
-                product.batch,
-                product.pricePerSquareMeter?.toString(),
-                product.pricePerTon?.toString(),
-                product.areaSquareMeters?.toString(),
-                product.weightTons?.toString(),
-                product.batchDate ? new Date(product.batchDate).toLocaleDateString() : '',
-                `${product.name} ${product.manufacturer}`,
-                `${product.manufacturer} ${product.name}`,
-                `${product.name} ${product.organization}`,
-                `${product.manufacturer} ${product.organization}`,
-            ].join(' ');
-
-            return containsAllTokens(searchableText, tokens);
-        });
-    };
-
-    // Группировка продуктов
-    const groupProducts = (products) => {
-        const grouped = {};
-
-        products.forEach(product => {
-            const org = product.organization || 'Без организации';
-            const manufacturer = product.manufacturer || 'Без производителя';
-            const rollName = product.name || 'Без названия';
-
-            if (!grouped[org]) {
-                grouped[org] = {};
-            }
-            if (!grouped[org][manufacturer]) {
-                grouped[org][manufacturer] = {};
-            }
-            if (!grouped[org][manufacturer][rollName]) {
-                grouped[org][manufacturer][rollName] = [];
-            }
-            grouped[org][manufacturer][rollName].push(product);
-        });
-
-        const sectionsData = [];
-        
-        Object.entries(grouped).forEach(([org, manufacturers]) => {
-            const manufacturerData = [];
-            
-            Object.entries(manufacturers).forEach(([manufacturer, rollNames]) => {
-                const rollData = [];
-                
-                Object.entries(rollNames).forEach(([rollName, items]) => {
-                    rollData.push({
-                        title: rollName,
-                        data: [items],
-                        type: 'roll'
-                    });
-                });
-                
-                if (rollData.length > 0) {
-                    manufacturerData.push({
-                        title: manufacturer,
-                        data: rollData,
-                        type: 'manufacturer',
-                        organizationName: org
-                    });
+        if (isMounted.current) {
+            setLoadingProgress(100);
+            setTimeout(() => {
+                if (isMounted.current) {
+                    setIsRefreshing(false);
+                    setLoadingProgress(0);
                 }
+            }, 500);
+        }
+    }, []);
+
+    // Загрузка продуктов (с группировкой ОДИН раз)
+    const loadProducts = useCallback(async () => {
+        if (!isMounted.current) return;
+        
+        setError(null);
+        setIsRefreshing(true);
+        startProgressSimulation();
+        
+        try {
+            const data = await getProducts();
+            
+            if (!isMounted.current) return;
+            
+            // Группируем данные в фоне
+            const groupedData = await new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(groupProducts(data));
+                }, 0);
             });
             
-            if (manufacturerData.length > 0) {
-                sectionsData.push({
-                    title: org,
-                    data: manufacturerData,
-                    type: 'organization'
-                });
+            if (!isMounted.current) return;
+            
+            allSectionsRef.current = groupedData;
+            setSections(groupedData);
+            completeProgress();
+        } catch (error) {
+            if (isMounted.current) {
+                completeProgress();
+                setError(error.message);
             }
-        });
+        }
+    }, [startProgressSimulation, completeProgress]);
 
-        return sectionsData;
-    };
+    // Загрузка при монтировании (отложенная)
+    useEffect(() => {
+        const task = InteractionManager.runAfterInteractions(() => {
+            loadProducts();
+        });
+        
+        return () => task.cancel();
+    }, []);
 
     // Мемоизированные секции с учетом поиска
-    const sections = useMemo(() => {
-        const filteredProducts = searchProducts(allProducts, searchQuery);
-        const grouped = groupProducts(filteredProducts);
-        sectionsRef.current = grouped;
-        return grouped;
-    }, [allProducts, searchQuery]);
+    const filteredSections = useMemo(() => {
+        if (!searchQuery.trim()) return sections;
+        return filterSections(sections, searchQuery);
+    }, [sections, searchQuery]);
 
     // Подсчет результатов поиска
     const searchResultsCount = useMemo(() => {
         if (!searchQuery.trim()) return null;
-        const filteredProducts = searchProducts(allProducts, searchQuery);
-        return filteredProducts.length;
-    }, [allProducts, searchQuery]);
+        
+        let count = 0;
+        for (let s = 0; s < filteredSections.length; s++) {
+            for (let m = 0; m < filteredSections[s].data.length; m++) {
+                for (let r = 0; r < filteredSections[s].data[m].data.length; r++) {
+                    count += filteredSections[s].data[m].data[r].data[0].length;
+                }
+            }
+        }
+        return count;
+    }, [filteredSections, searchQuery]);
 
-    // Функция для переключения состояния организации
+    // Переключение организации
     const toggleOrganization = useCallback((orgName) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setCollapsedOrganizations(prev => ({
@@ -204,7 +490,7 @@ const Rolls = () => {
         }));
     }, []);
 
-    // Функция для переключения состояния производителя
+    // Переключение производителя
     const toggleManufacturer = useCallback((manufacturerKey) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setCollapsedManufacturers(prev => ({
@@ -213,317 +499,137 @@ const Rolls = () => {
         }));
     }, []);
 
-    // Функция для сворачивания всех групп
+    // Свернуть все
     const collapseAll = useCallback(() => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        const currentSections = sectionsRef.current;
+        const currentSections = allSectionsRef.current;
         const newCollapsedOrgs = {};
         const newCollapsedManuf = {};
         
-        currentSections.forEach(org => {
+        for (let s = 0; s < currentSections.length; s++) {
+            const org = currentSections[s];
             newCollapsedOrgs[org.title] = true;
-            org.data.forEach(manuf => {
-                newCollapsedManuf[`${org.title}_${manuf.title}`] = true;
-            });
-        });
+            for (let m = 0; m < org.data.length; m++) {
+                newCollapsedManuf[`${org.title}_${org.data[m].title}`] = true;
+            }
+        }
         
         setCollapsedOrganizations(newCollapsedOrgs);
         setCollapsedManufacturers(newCollapsedManuf);
     }, []);
 
-    // Функция для разворачивания всех групп
+    // Развернуть все
     const expandAll = useCallback(() => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setCollapsedOrganizations({});
         setCollapsedManufacturers({});
     }, []);
 
-    const loadProducts = async () => {
-        setError(null);
-        setIsRefreshing(true);
-        startProgressSimulation();
+    // Очистка поиска
+    const clearSearch = useCallback(() => {
+        setSearchQuery('');
+        Keyboard.dismiss();
+    }, []);
+
+    // Рендер элемента секции
+    const renderSectionItem = useCallback(({ item, section }) => {
+        if (section.type !== 'organization') return null;
+        if (item.type !== 'manufacturer') return null;
         
-        try {
-            const data = await getProducts();
-            setAllProducts(data);
-            completeProgress();
-        } catch (error) {
-            completeProgress();
-            setError(error.message);
-        }
-    };
-
-    // Компонент карусели загрузки
-    const LoadingCarousel = () => {
-        const carouselItems = [
-            { icon: "server-outline", text: "Подключение к серверу..." },
-            { icon: "cloud-download-outline", text: "Загрузка данных..." },
-            { icon: "cube-outline", text: "Обработка рулонов..." },
-            { icon: "layers-outline", text: "Группировка..." },
-            { icon: "checkmark-circle-outline", text: "Завершение..." },
-        ];
-
-        const currentStep = Math.floor((loadingProgress / 100) * carouselItems.length);
-        const currentItem = carouselItems[Math.min(currentStep, carouselItems.length - 1)];
-
+        const manufacturerKey = `${section.title}_${item.title}`;
+        const isCollapsed = collapsedManufacturers[manufacturerKey];
+        const isOrgCollapsed = collapsedOrganizations[section.title];
+        
+        if (isOrgCollapsed) return null;
+        
         return (
-            <Modal
-                transparent={true}
-                animationType="fade"
-                visible={isRefreshing}
-                onRequestClose={() => {}}
-            >
-                <View style={styles.loadingOverlay}>
-                    <View style={styles.loadingCard}>
-                        <View style={styles.carouselContainer}>
-                            <View style={styles.iconContainer}>
-                                <Ionicons 
-                                    name={currentItem.icon} 
-                                    size={48} 
-                                    color="#3498db" 
-                                />
-                            </View>
-                            
-                            <Text style={styles.loadingText}>{currentItem.text}</Text>
-                            
-                            <View style={styles.progressBarContainer}>
-                                <View style={[styles.progressBar, { width: `${loadingProgress}%` }]} />
-                            </View>
-                            
-                            <Text style={styles.progressText}>
-                                {Math.round(loadingProgress)}%
-                            </Text>
-                            
-                            <ActivityIndicator 
-                                size="small" 
-                                color="#3498db" 
-                                style={styles.spinner}
-                            />
-                        </View>
-                        
-                        <View style={styles.loadingDots}>
-                            {carouselItems.map((_, index) => (
-                                <View 
-                                    key={index}
-                                    style={[
-                                        styles.dot,
-                                        index === Math.min(currentStep, carouselItems.length - 1) && styles.activeDot
-                                    ]}
-                                />
-                            ))}
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-        );
-    };
-
-    // Компонент таблицы для отображения данных рулона
-    const RollTable = ({ items }) => {
-        const totalArea = items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0);
-        const totalWeight = items.reduce((sum, item) => sum + (item.weightTons || 0), 0);
-        const totalPricePerSqMeter = items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0);
-        const totalPricePerTon = items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0);
-
-        return (
-            <View style={styles.tableContainer}>
-                {/* Заголовок таблицы */}
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.tableHeaderCell, styles.batchColumn]}>Партия</Text>
-                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена м²</Text>
-                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена тонна</Text>
-                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток м²</Text>
-                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток тонн</Text>
-                    <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
-                </View>
-
-                {/* Строки таблицы */}
-                {items.map((item, index) => (
-                    <View 
-                        key={item.id || index} 
-                        style={[
-                            styles.tableRow,
-                            index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
-                        ]}
-                    >
-                        <Text style={[styles.tableCell, styles.batchColumn]}>
-                            {item.batch || 'Н/Д'}
-                        </Text>
-                        <Text style={[styles.tableCell, styles.priceColumn]}>
-                            {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
-                        </Text>
-                        <Text style={[styles.tableCell, styles.priceColumn]}>
-                            {item.pricePerTon?.toLocaleString() || 0} ₽
-                        </Text>
-                        <Text style={[styles.tableCell, styles.measureColumn]}>
-                            {item.areaSquareMeters?.toLocaleString() || 0} м²
-                        </Text>
-                        <Text style={[styles.tableCell, styles.measureColumn]}>
-                            {item.weightTons?.toFixed(3) || 0} т
-                        </Text>
-                        <Text style={[styles.tableCell, styles.dateColumn]}>
-                            {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
-                        </Text>
-                    </View>
-                ))}
-
-                {/* Итоговая строка */}
-                <View style={styles.totalTableRow}>
-                    <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
-                        Итого:
-                    </Text>
-                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerSqMeter.toLocaleString()} ₽
-                    </Text>
-                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerTon.toLocaleString()} ₽
-                    </Text>
-                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
-                        {totalArea.toLocaleString()} м²
-                    </Text>
-                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
-                        {totalWeight.toFixed(3)} т
-                    </Text>
-                    <Text style={[styles.totalTableCell, styles.dateColumn]} />
-                </View>
-            </View>
-        );
-    };
-
-    // Компонент для отображения одного рулона
-    const RollItem = ({ items, rollName }) => {
-        return (
-            <View style={styles.rollCard}>
-                <View style={styles.rollNameContainer}>
-                    <Ionicons name="document-text-outline" size={18} color="#3498db" style={styles.rollIcon} />
-                    <Text style={styles.rollName}>{rollName}</Text>
-                    <View style={styles.rollBadge}>
-                        <Text style={styles.rollBadgeText}>
-                            {items.length} парт.
-                        </Text>
-                    </View>
-                </View>
-                
-                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                    <RollTable items={items} />
-                </ScrollView>
-            </View>
-        );
-    };
-
-    // Рендер элемента секции (производители)
-    const renderSectionItem = ({ item, section }) => {
-        if (section.type === 'organization') {
-            if (item.type === 'manufacturer') {
-                const manufacturerKey = `${section.title}_${item.title}`;
-                const isCollapsed = collapsedManufacturers[manufacturerKey];
-                const isOrgCollapsed = collapsedOrganizations[section.title];
-                
-                if (isOrgCollapsed) return null;
-                
-                return (
-                    <View style={styles.manufacturerContainer}>
-                        <TouchableOpacity 
-                            style={styles.manufacturerHeader}
-                            onPress={() => toggleManufacturer(manufacturerKey)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={styles.manufacturerTitleContainer}>
-                                <Ionicons 
-                                    name={isCollapsed ? "chevron-forward" : "chevron-down"} 
-                                    size={20} 
-                                    color="#3498db" 
-                                    style={styles.chevron}
-                                />
-                                <Ionicons name="business-outline" size={18} color="#34495e" style={styles.manufacturerIcon} />
-                                <Text style={styles.manufacturerTitle}>{item.title}</Text>
-                            </View>
-                            <View style={styles.manufacturerBadge}>
-                                <Text style={styles.manufacturerBadgeText}>
-                                    {item.data.length} рул.
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
-                        
-                        {!isCollapsed && item.data.map((rollItem, index) => (
-                            <View key={rollItem.title + index}>
-                                {rollItem.type === 'roll' && (
-                                    <RollItem items={rollItem.data[0]} rollName={rollItem.title} />
-                                )}
-                            </View>
-                        ))}
-                    </View>
-                );
-            }
-        }
-        return null;
-    };
-
-    // Рендер заголовка секции (организации)
-    const renderSectionHeader = ({ section }) => {
-        if (section.type === 'organization') {
-            const isCollapsed = collapsedOrganizations[section.title];
-            const totalPositions = section.data.reduce((sum, m) => 
-                sum + m.data.reduce((s, r) => s + r.data[0].length, 0), 0
-            );
-            
-            return (
+            <View style={styles.manufacturerContainer}>
                 <TouchableOpacity 
-                    style={styles.organizationHeader}
-                    onPress={() => toggleOrganization(section.title)}
+                    style={styles.manufacturerHeader}
+                    onPress={() => toggleManufacturer(manufacturerKey)}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.organizationTitleContainer}>
+                    <View style={styles.manufacturerTitleContainer}>
                         <Ionicons 
                             name={isCollapsed ? "chevron-forward" : "chevron-down"} 
-                            size={22} 
-                            color="#fff" 
+                            size={20} 
+                            color="#3498db" 
                             style={styles.chevron}
                         />
-                        <Ionicons name="home-outline" size={20} color="#fff" style={styles.orgIcon} />
-                        <Text style={styles.organizationTitle}>{section.title}</Text>
+                        <Ionicons name="business-outline" size={18} color="#34495e" style={styles.manufacturerIcon} />
+                        <Text style={styles.manufacturerTitle}>{item.title}</Text>
                     </View>
-                    <View style={styles.organizationInfo}>
-                        <Text style={styles.organizationCount}>
-                            {totalPositions} поз.
-                        </Text>
-                        <Text style={styles.organizationCount}>
-                            {section.data.length} произв.
+                    <View style={styles.manufacturerBadge}>
+                        <Text style={styles.manufacturerBadgeText}>
+                            {item.data.length} рул.
                         </Text>
                     </View>
                 </TouchableOpacity>
-            );
-        }
-        return null;
-    };
+                
+                {!isCollapsed && item.data.map((rollItem, index) => (
+                    <View key={rollItem.title + index}>
+                        {rollItem.type === 'roll' && (
+                            <RollItem items={rollItem.data[0]} rollName={rollItem.title} />
+                        )}
+                    </View>
+                ))}
+            </View>
+        );
+    }, [collapsedOrganizations, collapsedManufacturers, toggleManufacturer]);
 
-    // Очистка поиска и скрытие клавиатуры
-    const clearSearch = () => {
-        setSearchQuery('');
-        Keyboard.dismiss();
-    };
-
-    // Скрытие клавиатуры при нажатии вне поля ввода
-    const dismissKeyboard = () => {
-        Keyboard.dismiss();
-    };
-
-    useEffect(() => {
-        loadProducts();
+    // Рендер заголовка секции
+    const renderSectionHeader = useCallback(({ section }) => {
+        if (section.type !== 'organization') return null;
         
-        return () => {
-            if (progressInterval.current) {
-                clearInterval(progressInterval.current);
+        const isCollapsed = collapsedOrganizations[section.title];
+        
+        let totalPositions = 0;
+        for (let m = 0; m < section.data.length; m++) {
+            for (let r = 0; r < section.data[m].data.length; r++) {
+                totalPositions += section.data[m].data[r].data[0].length;
             }
-        };
+        }
+        
+        return (
+            <TouchableOpacity 
+                style={styles.organizationHeader}
+                onPress={() => toggleOrganization(section.title)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.organizationTitleContainer}>
+                    <Ionicons 
+                        name={isCollapsed ? "chevron-forward" : "chevron-down"} 
+                        size={22} 
+                        color="#fff" 
+                        style={styles.chevron}
+                    />
+                    <Ionicons name="home-outline" size={20} color="#fff" style={styles.orgIcon} />
+                    <Text style={styles.organizationTitle}>{section.title}</Text>
+                </View>
+                <View style={styles.organizationInfo}>
+                    <Text style={styles.organizationCount}>
+                        {totalPositions} поз.
+                    </Text>
+                    <Text style={styles.organizationCount}>
+                        {section.data.length} произв.
+                    </Text>
+                </View>
+            </TouchableOpacity>
+        );
+    }, [collapsedOrganizations, toggleOrganization]);
+
+    // Оптимизированный keyExtractor
+    const keyExtractor = useCallback((item, index) => {
+        return `${item.type}_${item.title}_${index}`;
     }, []);
 
     return (
         <ThemedView style={styles.container}>
-            {/* Карусель загрузки */}
-            <LoadingCarousel />
+            <LoadingCarousel 
+                isRefreshing={isRefreshing} 
+                loadingProgress={loadingProgress} 
+            />
 
-            {/* Кнопка обновления в верхнем левом углу */}
             <TouchableOpacity 
                 style={[styles.refreshButton, isRefreshing && styles.refreshButtonDisabled]}
                 onPress={loadProducts}
@@ -536,13 +642,12 @@ const Rolls = () => {
             <KeyboardAvoidingView 
                 style={styles.keyboardAvoidingContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
-                {/* Основной контент */}
                 <SectionList
-                    sections={sections}
+                    sections={filteredSections}
                     renderItem={renderSectionItem}
                     renderSectionHeader={renderSectionHeader}
+                    keyExtractor={keyExtractor}
                     ListHeaderComponent={
                         <>
                             <Text style={styles.heading}>Список рулонов</Text>
@@ -551,7 +656,7 @@ const Rolls = () => {
                                     Найдено: {searchResultsCount} позиций
                                 </Text>
                             )}
-                            {sections.length > 0 && (
+                            {filteredSections.length > 0 && (
                                 <View style={styles.controlsContainer}>
                                     <TouchableOpacity 
                                         style={styles.controlButton}
@@ -573,7 +678,6 @@ const Rolls = () => {
                             )}
                         </>
                     }
-                    keyExtractor={(item, index) => item.title + index}
                     contentContainerStyle={[
                         styles.listContainer,
                         keyboardHeight > 0 && { paddingBottom: 0 }
@@ -586,17 +690,16 @@ const Rolls = () => {
                     stickySectionHeadersEnabled={true}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
-                    onScrollBeginDrag={dismissKeyboard}
+                    initialNumToRender={5}
+                    maxToRenderPerBatch={3}
+                    windowSize={5}
+                    removeClippedSubviews={true}
                 />
 
-                {/* Окно поиска в нижней части */}
                 <View style={[
                     styles.searchContainer, 
                     isSearchFocused && styles.searchContainerFocused,
-                    keyboardHeight > 0 && { 
-                        paddingBottom: Platform.OS === 'ios' ? 10 : 10,
-                        marginBottom: 0
-                    }
+                    keyboardHeight > 0 && { paddingBottom: 10, marginBottom: 0 }
                 ]}>
                     <View style={styles.searchInputWrapper}>
                         <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
@@ -612,7 +715,6 @@ const Rolls = () => {
                             autoCorrect={false}
                             clearButtonMode="while-editing"
                             returnKeyType="search"
-                            onSubmitEditing={dismissKeyboard}
                         />
                         {searchQuery.length > 0 && (
                             <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
@@ -631,7 +733,6 @@ const Rolls = () => {
                 </View>
             </KeyboardAvoidingView>
 
-            {/* Ошибка */}
             {err && (
                 <TouchableOpacity 
                     style={[
@@ -652,7 +753,7 @@ const Rolls = () => {
     );
 };
 
-export default Rolls;
+// ============ СТИЛИ (без изменений) ============
 
 const styles = StyleSheet.create({
     container: {
@@ -683,7 +784,6 @@ const styles = StyleSheet.create({
     refreshButtonDisabled: {
         backgroundColor: '#95a5a6',
     },
-    // Стили для карусели загрузки
     loadingOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -913,7 +1013,6 @@ const styles = StyleSheet.create({
         color: '#3498db',
         fontWeight: '500',
     },
-    // Стили для таблицы
     tableContainer: {
         minWidth: 580,
     },
@@ -1074,3 +1173,5 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
 });
+
+export default Rolls;
