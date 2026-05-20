@@ -338,7 +338,7 @@ const ManufacturerSection = React.memo(({ manufacturer, organizationTitle, isCol
                 </View>
                 <View style={styles.manufacturerBadge}>
                     <Text style={styles.manufacturerBadgeText}>
-                        {manufacturer.data ? manufacturer.data.length : 0} рул.
+                        {manufacturer.data ? manufacturer.data.length : 0} цвет.
                     </Text>
                 </View>
             </TouchableOpacity>
@@ -393,7 +393,7 @@ const OrganizationSection = React.memo(({ organization, collapsedOrganizations, 
                 </View>
                 <View style={styles.organizationInfo}>
                     <Text style={styles.organizationCount}>
-                        {totalPositions} поз.
+                        {totalPositions} рул.
                     </Text>
                     <Text style={styles.organizationCount}>
                         {organization.data ? organization.data.length : 0} произв.
