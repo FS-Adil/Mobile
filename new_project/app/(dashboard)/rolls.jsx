@@ -257,10 +257,10 @@ const RollTable = React.memo(({ items }) => {
                         Итого:
                     </Text>
                     <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerSqMeter.toLocaleString()} ₽
+                        {/* {totalPricePerSqMeter.toLocaleString()} ₽ */}
                     </Text>
                     <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerTon.toLocaleString()} ₽
+                        {/* {totalPricePerTon.toLocaleString()} ₽ */}
                     </Text>
                     <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
                         {totalArea.toLocaleString()} м²
@@ -625,7 +625,7 @@ const Rolls = () => {
                     </View>
                     <View style={styles.manufacturerBadge}>
                         <Text style={styles.manufacturerBadgeText}>
-                            {item.data.length} рул.
+                            {item.data.length} номенкл.
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -672,7 +672,7 @@ const Rolls = () => {
                 </View>
                 <View style={styles.organizationInfo}>
                     <Text style={styles.organizationCount}>
-                        {totalPositions} поз.
+                        {totalPositions} рул.
                     </Text>
                     <Text style={styles.organizationCount}>
                         {section.data.length} произв.
