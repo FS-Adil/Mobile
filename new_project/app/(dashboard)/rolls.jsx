@@ -3,7 +3,6 @@ import ThemedView from "../../components/ThemedView";
 import { 
     StyleSheet, 
     Text, 
-    SectionList, 
     View, 
     TextInput, 
     TouchableOpacity, 
@@ -44,7 +43,7 @@ const containsAllTokens = (text, tokens) => {
     return tokens.every(token => normalizedText.includes(token));
 };
 
-// Оптимизированная группировка продуктов
+// Группировка продуктов
 const groupProducts = (products) => {
     if (!products || !Array.isArray(products) || products.length === 0) {
         return [];
@@ -98,7 +97,7 @@ const groupProducts = (products) => {
                 if (items && items.length > 0) {
                     rollData.push({
                         title: rollName,
-                        data: [items],
+                        data: items,
                         type: 'roll',
                         id: `${org}_${manufacturer}_${rollName}`
                     });
@@ -153,9 +152,9 @@ const filterSections = (sections, query) => {
             
             for (let r = 0; r < manuf.data.length; r++) {
                 const roll = manuf.data[r];
-                if (!roll || !roll.data || !roll.data[0]) continue;
+                if (!roll || !roll.data) continue;
                 
-                const items = roll.data[0];
+                const items = roll.data;
                 let matches = false;
                 
                 for (let i = 0; i < items.length; i++) {
@@ -210,52 +209,14 @@ const filterSections = (sections, query) => {
 // ============ КОМПОНЕНТ ТАБЛИЦЫ ============
 
 const RollTable = React.memo(({ items }) => {
-    const totalArea = useMemo(() => 
-        items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0), 
-        [items]
-    );
-    const totalWeight = useMemo(() => 
-        items.reduce((sum, item) => sum + (item.weightTons || 0), 0), 
-        [items]
-    );
-    const totalPricePerSqMeter = useMemo(() => 
-        items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0), 
-        [items]
-    );
-    const totalPricePerTon = useMemo(() => 
-        items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0), 
-        [items]
-    );
-
-    // Используем FlatList вместо прямого рендера массива для лучшей производительности
-    const renderRow = useCallback(({ item, index }) => (
-        <View 
-            key={item.id || index} 
-            style={[
-                styles.tableRow,
-                index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
-            ]}
-        >
-            <Text style={[styles.tableCell, styles.batchColumn]} numberOfLines={1}>
-                {item.batch || 'Н/Д'}
-            </Text>
-            <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
-                {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
-            </Text>
-            <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
-                {item.pricePerTon?.toLocaleString() || 0} ₽
-            </Text>
-            <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
-                {item.areaSquareMeters?.toLocaleString() || 0} м²
-            </Text>
-            <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
-                {item.weightTons?.toFixed(3) || 0} т
-            </Text>
-            <Text style={[styles.tableCell, styles.dateColumn]} numberOfLines={1}>
-                {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
-            </Text>
-        </View>
-    ), []);
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return null;
+    }
+    
+    const totalArea = items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0);
+    const totalWeight = items.reduce((sum, item) => sum + (item.weightTons || 0), 0);
+    const totalPricePerSqMeter = items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0);
+    const totalPricePerTon = items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0);
 
     return (
         <ScrollView 
@@ -273,23 +234,44 @@ const RollTable = React.memo(({ items }) => {
                     <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
                 </View>
 
-                <FlatList
-                    data={items}
-                    renderItem={renderRow}
-                    keyExtractor={(item, index) => item.id?.toString() || `row_${index}`}
-                    scrollEnabled={false}
-                    removeClippedSubviews={Platform.OS === 'android'}
-                />
+                {items.map((item, index) => (
+                    <View 
+                        key={item.id || index} 
+                        style={[
+                            styles.tableRow,
+                            index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
+                        ]}
+                    >
+                        <Text style={[styles.tableCell, styles.batchColumn]} numberOfLines={1}>
+                            {item.batch || 'Н/Д'}
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
+                            {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
+                            {item.pricePerTon?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
+                            {item.areaSquareMeters?.toLocaleString() || 0} м²
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
+                            {item.weightTons?.toFixed(3) || 0} т
+                        </Text>
+                        <Text style={[styles.tableCell, styles.dateColumn]} numberOfLines={1}>
+                            {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
+                        </Text>
+                    </View>
+                ))}
 
                 <View style={styles.totalTableRow}>
                     <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
                         Итого:
                     </Text>
                     <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerSqMeter.toLocaleString()} ₽
+                        {/* {totalPricePerSqMeter.toLocaleString()} ₽ */}
                     </Text>
                     <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                        {totalPricePerTon.toLocaleString()} ₽
+                        {/* {totalPricePerTon.toLocaleString()} ₽ */}
                     </Text>
                     <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
                         {totalArea.toLocaleString()} м²
@@ -306,9 +288,8 @@ const RollTable = React.memo(({ items }) => {
 
 // ============ КОМПОНЕНТ РУЛОНА ============
 
-const RollItem = React.memo(({ items, rollName, id }) => {
-    // Защита от undefined
-    if (!items || !Array.isArray(items) || items.length === 0) {
+const RollItem = React.memo(({ roll }) => {
+    if (!roll || !roll.data || !Array.isArray(roll.data) || roll.data.length === 0) {
         return null;
     }
     
@@ -316,15 +297,15 @@ const RollItem = React.memo(({ items, rollName, id }) => {
         <View style={styles.rollCard}>
             <View style={styles.rollNameContainer}>
                 <Ionicons name="document-text-outline" size={18} color="#3498db" style={styles.rollIcon} />
-                <Text style={styles.rollName} numberOfLines={2}>{rollName || 'Без названия'}</Text>
+                <Text style={styles.rollName} numberOfLines={2}>{roll.title || 'Без названия'}</Text>
                 <View style={styles.rollBadge}>
                     <Text style={styles.rollBadgeText}>
-                        {items.length} парт.
+                        {roll.data.length} парт.
                     </Text>
                 </View>
             </View>
             
-            <RollTable items={items} />
+            <RollTable items={roll.data} />
         </View>
     );
 });
@@ -332,14 +313,11 @@ const RollItem = React.memo(({ items, rollName, id }) => {
 // ============ КОМПОНЕНТ ПРОИЗВОДИТЕЛЯ ============
 
 const ManufacturerSection = React.memo(({ manufacturer, organizationTitle, isCollapsed, onToggle }) => {
-    // Защита от undefined
     if (!manufacturer || !manufacturer.title) {
         return null;
     }
     
     const manufacturerKey = `${organizationTitle}_${manufacturer.title}`;
-    
-    if (isCollapsed) return null;
     
     return (
         <View style={styles.manufacturerContainer}>
@@ -365,13 +343,8 @@ const ManufacturerSection = React.memo(({ manufacturer, organizationTitle, isCol
                 </View>
             </TouchableOpacity>
             
-            {manufacturer.data && Array.isArray(manufacturer.data) && manufacturer.data.map((rollItem, index) => (
-                <RollItem 
-                    key={rollItem?.id || `${manufacturerKey}_${rollItem?.title}_${index}`}
-                    items={rollItem?.data?.[0] || []} 
-                    rollName={rollItem?.title || 'Без названия'}
-                    id={rollItem?.id}
-                />
+            {!isCollapsed && manufacturer.data && manufacturer.data.map((roll) => (
+                <RollItem key={roll.id || roll.title} roll={roll} />
             ))}
         </View>
     );
@@ -379,21 +352,22 @@ const ManufacturerSection = React.memo(({ manufacturer, organizationTitle, isCol
 
 // ============ КОМПОНЕНТ ОРГАНИЗАЦИИ ============
 
-const OrganizationSection = React.memo(({ section, collapsedOrganizations, collapsedManufacturers, onToggleOrganization, onToggleManufacturer }) => {
-    // Защита от undefined
-    if (!section || !section.title) {
+const OrganizationSection = React.memo(({ organization, collapsedOrganizations, collapsedManufacturers, onToggleOrganization, onToggleManufacturer }) => {
+    if (!organization || !organization.title) {
         return null;
     }
     
-    const isOrgCollapsed = collapsedOrganizations[section.title];
+    const isOrgCollapsed = collapsedOrganizations[organization.title];
     
     let totalPositions = 0;
-    if (section.data && Array.isArray(section.data)) {
-        for (let m = 0; m < section.data.length; m++) {
-            if (section.data[m] && section.data[m].data) {
-                for (let r = 0; r < section.data[m].data.length; r++) {
-                    if (section.data[m].data[r] && section.data[m].data[r].data && section.data[m].data[r].data[0]) {
-                        totalPositions += section.data[m].data[r].data[0].length;
+    if (organization.data && Array.isArray(organization.data)) {
+        for (let m = 0; m < organization.data.length; m++) {
+            const manuf = organization.data[m];
+            if (manuf && manuf.data) {
+                for (let r = 0; r < manuf.data.length; r++) {
+                    const roll = manuf.data[r];
+                    if (roll && roll.data) {
+                        totalPositions += roll.data.length;
                     }
                 }
             }
@@ -404,7 +378,7 @@ const OrganizationSection = React.memo(({ section, collapsedOrganizations, colla
         <View style={styles.organizationWrapper}>
             <TouchableOpacity 
                 style={styles.organizationHeader}
-                onPress={() => onToggleOrganization(section.title)}
+                onPress={() => onToggleOrganization(organization.title)}
                 activeOpacity={0.7}
             >
                 <View style={styles.organizationTitleContainer}>
@@ -415,28 +389,27 @@ const OrganizationSection = React.memo(({ section, collapsedOrganizations, colla
                         style={styles.chevron}
                     />
                     <Ionicons name="home-outline" size={20} color="#fff" style={styles.orgIcon} />
-                    <Text style={styles.organizationTitle}>{section.title}</Text>
+                    <Text style={styles.organizationTitle}>{organization.title}</Text>
                 </View>
                 <View style={styles.organizationInfo}>
                     <Text style={styles.organizationCount}>
                         {totalPositions} поз.
                     </Text>
                     <Text style={styles.organizationCount}>
-                        {section.data ? section.data.length : 0} произв.
+                        {organization.data ? organization.data.length : 0} произв.
                     </Text>
                 </View>
             </TouchableOpacity>
             
-            {!isOrgCollapsed && section.data && Array.isArray(section.data) && section.data.map((manufacturer) => {
-                if (!manufacturer) return null;
-                const manufacturerKey = `${section.title}_${manufacturer.title}`;
+            {!isOrgCollapsed && organization.data && organization.data.map((manufacturer) => {
+                const manufacturerKey = `${organization.title}_${manufacturer.title}`;
                 const isManufCollapsed = collapsedManufacturers[manufacturerKey];
                 
                 return (
                     <ManufacturerSection
                         key={manufacturer.id || manufacturerKey}
                         manufacturer={manufacturer}
-                        organizationTitle={section.title}
+                        organizationTitle={organization.title}
                         isCollapsed={isManufCollapsed}
                         onToggle={onToggleManufacturer}
                     />
@@ -613,15 +586,7 @@ const Rolls = () => {
             
             if (!isMounted.current) return;
             
-            const groupedData = await new Promise((resolve) => {
-                if (Platform.OS === 'android') {
-                    requestAnimationFrame(() => {
-                        resolve(groupProducts(data));
-                    });
-                } else {
-                    resolve(groupProducts(data));
-                }
-            });
+            const groupedData = groupProducts(data);
             
             if (!isMounted.current) return;
             
@@ -658,13 +623,22 @@ const Rolls = () => {
 
     // Подсчет результатов поиска
     const searchResultsCount = useMemo(() => {
-        if (!searchQuery.trim()) return null;
+        if (!searchQuery.trim() || !filteredSections.length) return null;
         
         let count = 0;
         for (let s = 0; s < filteredSections.length; s++) {
-            for (let m = 0; m < filteredSections[s].data.length; m++) {
-                for (let r = 0; r < filteredSections[s].data[m].data.length; r++) {
-                    count += filteredSections[s].data[m].data[r].data[0].length;
+            const org = filteredSections[s];
+            if (org && org.data) {
+                for (let m = 0; m < org.data.length; m++) {
+                    const manuf = org.data[m];
+                    if (manuf && manuf.data) {
+                        for (let r = 0; r < manuf.data.length; r++) {
+                            const roll = manuf.data[r];
+                            if (roll && roll.data) {
+                                count += roll.data.length;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -711,9 +685,16 @@ const Rolls = () => {
         
         for (let s = 0; s < currentSections.length; s++) {
             const org = currentSections[s];
-            newCollapsedOrgs[org.title] = true;
-            for (let m = 0; m < org.data.length; m++) {
-                newCollapsedManuf[`${org.title}_${org.data[m].title}`] = true;
+            if (org && org.title) {
+                newCollapsedOrgs[org.title] = true;
+                if (org.data) {
+                    for (let m = 0; m < org.data.length; m++) {
+                        const manuf = org.data[m];
+                        if (manuf && manuf.title) {
+                            newCollapsedManuf[`${org.title}_${manuf.title}`] = true;
+                        }
+                    }
+                }
             }
         }
         
@@ -745,32 +726,22 @@ const Rolls = () => {
         Keyboard.dismiss();
     }, []);
 
-    // Рендер элемента секции - переписан для избежания ошибки addViewAt
-    const renderSectionItem = useCallback(({ item, section }) => {
-    // Защита от undefined
-    if (!item || !item.title) {
-        return null;
-    }
-    
-    return (
-        <OrganizationSection
-            section={item}
-            collapsedOrganizations={collapsedOrganizations}
-            collapsedManufacturers={collapsedManufacturers}
-            onToggleOrganization={toggleOrganization}
-            onToggleManufacturer={toggleManufacturer}
-        />
-    );
-}, [collapsedOrganizations, collapsedManufacturers, toggleOrganization, toggleManufacturer]);
-
-    // Рендер заголовка секции - теперь просто возвращает null, так как заголовок встроен в OrganizationSection
-    const renderSectionHeader = useCallback(() => {
-        return null;
-    }, []);
+    // Рендер элемента
+    const renderOrganization = useCallback(({ item }) => {
+        return (
+            <OrganizationSection
+                organization={item}
+                collapsedOrganizations={collapsedOrganizations}
+                collapsedManufacturers={collapsedManufacturers}
+                onToggleOrganization={toggleOrganization}
+                onToggleManufacturer={toggleManufacturer}
+            />
+        );
+    }, [collapsedOrganizations, collapsedManufacturers, toggleOrganization, toggleManufacturer]);
 
     // keyExtractor
-    const keyExtractor = useCallback((item, index) => {
-        return item.id || `${item.type}_${item.title}_${index}`;
+    const keyExtractor = useCallback((item) => {
+        return item.id || item.title;
     }, []);
 
     return (
@@ -796,12 +767,12 @@ const Rolls = () => {
             >
                 <FlatList
                     data={filteredSections}
-                    renderItem={renderSectionItem}
+                    renderItem={renderOrganization}
                     keyExtractor={keyExtractor}
                     ListHeaderComponent={
                         <>
                             <Text style={styles.heading}>Список рулонов</Text>
-                            {searchResultsCount !== null && (
+                            {searchResultsCount !== null && searchResultsCount > 0 && (
                                 <Text style={styles.searchResults}>
                                     Найдено: {searchResultsCount} позиций
                                 </Text>
