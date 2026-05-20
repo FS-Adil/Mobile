@@ -22,11 +22,11 @@ import { Colors } from "../../constants/Colors";
 import { Ionicons } from '@expo/vector-icons';
 
 // Включаем LayoutAnimation для Android
-// if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-//     UIManager.setLayoutAnimationEnabledExperimental(true);
-// }
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
-// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (вынесены из компонента) ============
+// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
 
 const normalizeText = (text) => {
     return text?.toString().toLowerCase().replace(/\s+/g, ' ').trim() || '';
@@ -43,51 +43,59 @@ const containsAllTokens = (text, tokens) => {
     return tokens.every(token => normalizedText.includes(token));
 };
 
-// Группировка продуктов (вызывается ОДИН раз при загрузке)
+// Оптимизированная группировка продуктов с использованием Map
 const groupProducts = (products) => {
-    const grouped = {};
+    const grouped = new Map();
 
-    // Первый проход - группируем
     for (let i = 0; i < products.length; i++) {
         const product = products[i];
         const org = product.organization || 'Без организации';
         const manufacturer = product.manufacturer || 'Без производителя';
         const rollName = product.name || 'Без названия';
 
-        if (!grouped[org]) grouped[org] = {};
-        if (!grouped[org][manufacturer]) grouped[org][manufacturer] = {};
-        if (!grouped[org][manufacturer][rollName]) grouped[org][manufacturer][rollName] = [];
-        
-        grouped[org][manufacturer][rollName].push(product);
+        if (!grouped.has(org)) {
+            grouped.set(org, new Map());
+        }
+        const orgMap = grouped.get(org);
+
+        if (!orgMap.has(manufacturer)) {
+            orgMap.set(manufacturer, new Map());
+        }
+        const manufMap = orgMap.get(manufacturer);
+
+        if (!manufMap.has(rollName)) {
+            manufMap.set(rollName, []);
+        }
+        manufMap.get(rollName).push(product);
     }
 
-    // Второй проход - формируем секции
+    // Конвертируем Map в нужную структуру
     const sectionsData = [];
-    const orgs = Object.keys(grouped).sort();
-    
+    const orgs = Array.from(grouped.keys()).sort();
+
     for (let o = 0; o < orgs.length; o++) {
         const org = orgs[o];
-        const manufacturers = grouped[org];
+        const manufacturers = grouped.get(org);
         const manufacturerData = [];
-        const manufKeys = Object.keys(manufacturers).sort();
-        
+        const manufKeys = Array.from(manufacturers.keys()).sort();
+
         for (let m = 0; m < manufKeys.length; m++) {
             const manufacturer = manufKeys[m];
-            const rollNames = manufacturers[manufacturer];
+            const rollNames = manufacturers.get(manufacturer);
             const rollData = [];
-            const rollKeys = Object.keys(rollNames).sort();
-            
+            const rollKeys = Array.from(rollNames.keys()).sort();
+
             for (let r = 0; r < rollKeys.length; r++) {
                 const rollName = rollKeys[r];
-                const items = rollNames[rollName];
-                
+                const items = rollNames.get(rollName);
+
                 rollData.push({
                     title: rollName,
                     data: [items],
                     type: 'roll'
                 });
             }
-            
+
             if (rollData.length > 0) {
                 manufacturerData.push({
                     title: manufacturer,
@@ -97,7 +105,7 @@ const groupProducts = (products) => {
                 });
             }
         }
-        
+
         if (manufacturerData.length > 0) {
             sectionsData.push({
                 title: org,
@@ -131,7 +139,6 @@ const filterSections = (sections, query) => {
                 const roll = manuf.data[r];
                 const items = roll.data[0];
                 
-                // Проверяем, подходит ли рулон под поиск
                 let matches = false;
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
@@ -183,70 +190,88 @@ const filterSections = (sections, query) => {
 // ============ КОМПОНЕНТ ТАБЛИЦЫ ============
 
 const RollTable = React.memo(({ items }) => {
-    const totalArea = items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0);
-    const totalWeight = items.reduce((sum, item) => sum + (item.weightTons || 0), 0);
-    const totalPricePerSqMeter = items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0);
-    const totalPricePerTon = items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0);
+    const totalArea = useMemo(() => 
+        items.reduce((sum, item) => sum + (item.areaSquareMeters || 0), 0), 
+        [items]
+    );
+    const totalWeight = useMemo(() => 
+        items.reduce((sum, item) => sum + (item.weightTons || 0), 0), 
+        [items]
+    );
+    const totalPricePerSqMeter = useMemo(() => 
+        items.reduce((sum, item) => sum + (item.pricePerSquareMeter || 0), 0), 
+        [items]
+    );
+    const totalPricePerTon = useMemo(() => 
+        items.reduce((sum, item) => sum + (item.pricePerTon || 0), 0), 
+        [items]
+    );
 
     return (
-        <View style={styles.tableContainer}>
-            <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, styles.batchColumn]}>Партия</Text>
-                <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена м²</Text>
-                <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена тонна</Text>
-                <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток м²</Text>
-                <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток тонн</Text>
-                <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
-            </View>
-
-            {items.map((item, index) => (
-                <View 
-                    key={item.id || index} 
-                    style={[
-                        styles.tableRow,
-                        index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
-                    ]}
-                >
-                    <Text style={[styles.tableCell, styles.batchColumn]}>
-                        {item.batch || 'Н/Д'}
-                    </Text>
-                    <Text style={[styles.tableCell, styles.priceColumn]}>
-                        {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
-                    </Text>
-                    <Text style={[styles.tableCell, styles.priceColumn]}>
-                        {item.pricePerTon?.toLocaleString() || 0} ₽
-                    </Text>
-                    <Text style={[styles.tableCell, styles.measureColumn]}>
-                        {item.areaSquareMeters?.toLocaleString() || 0} м²
-                    </Text>
-                    <Text style={[styles.tableCell, styles.measureColumn]}>
-                        {item.weightTons?.toFixed(3) || 0} т
-                    </Text>
-                    <Text style={[styles.tableCell, styles.dateColumn]}>
-                        {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
-                    </Text>
+        <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={true}
+            nestedScrollEnabled={Platform.OS === 'android'}
+        >
+            <View style={styles.tableContainer}>
+                <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderCell, styles.batchColumn]}>Партия</Text>
+                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена м²</Text>
+                    <Text style={[styles.tableHeaderCell, styles.priceColumn]}>Цена тонна</Text>
+                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток м²</Text>
+                    <Text style={[styles.tableHeaderCell, styles.measureColumn]}>Остаток тонн</Text>
+                    <Text style={[styles.tableHeaderCell, styles.dateColumn]}>Дата партии</Text>
                 </View>
-            ))}
 
-            <View style={styles.totalTableRow}>
-                <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
-                    Итого:
-                </Text>
-                <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                    {totalPricePerSqMeter.toLocaleString()} ₽
-                </Text>
-                <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
-                    {totalPricePerTon.toLocaleString()} ₽
-                </Text>
-                <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
-                    {totalArea.toLocaleString()} м²
-                </Text>
-                <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
-                    {totalWeight.toFixed(3)} т
-                </Text>
-                <Text style={[styles.totalTableCell, styles.dateColumn]} />
+                {items.map((item, index) => (
+                    <View 
+                        key={item.id || index} 
+                        style={[
+                            styles.tableRow,
+                            index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd
+                        ]}
+                    >
+                        <Text style={[styles.tableCell, styles.batchColumn]} numberOfLines={1}>
+                            {item.batch || 'Н/Д'}
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
+                            {item.pricePerSquareMeter?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.priceColumn]} numberOfLines={1}>
+                            {item.pricePerTon?.toLocaleString() || 0} ₽
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
+                            {item.areaSquareMeters?.toLocaleString() || 0} м²
+                        </Text>
+                        <Text style={[styles.tableCell, styles.measureColumn]} numberOfLines={1}>
+                            {item.weightTons?.toFixed(3) || 0} т
+                        </Text>
+                        <Text style={[styles.tableCell, styles.dateColumn]} numberOfLines={1}>
+                            {item.batchDate ? new Date(item.batchDate).toLocaleDateString() : 'Н/Д'}
+                        </Text>
+                    </View>
+                ))}
+
+                <View style={styles.totalTableRow}>
+                    <Text style={[styles.totalTableCell, styles.batchColumn, styles.totalText]}>
+                        Итого:
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                        {totalPricePerSqMeter.toLocaleString()} ₽
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.priceColumn, styles.totalText]}>
+                        {totalPricePerTon.toLocaleString()} ₽
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                        {totalArea.toLocaleString()} м²
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.measureColumn, styles.totalMeasureText]}>
+                        {totalWeight.toFixed(3)} т
+                    </Text>
+                    <Text style={[styles.totalTableCell, styles.dateColumn]} />
+                </View>
             </View>
-        </View>
+        </ScrollView>
     );
 });
 
@@ -257,7 +282,7 @@ const RollItem = React.memo(({ items, rollName }) => {
         <View style={styles.rollCard}>
             <View style={styles.rollNameContainer}>
                 <Ionicons name="document-text-outline" size={18} color="#3498db" style={styles.rollIcon} />
-                <Text style={styles.rollName}>{rollName}</Text>
+                <Text style={styles.rollName} numberOfLines={2}>{rollName}</Text>
                 <View style={styles.rollBadge}>
                     <Text style={styles.rollBadgeText}>
                         {items.length} парт.
@@ -265,9 +290,7 @@ const RollItem = React.memo(({ items, rollName }) => {
                 </View>
             </View>
             
-            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                <RollTable items={items} />
-            </ScrollView>
+            <RollTable items={items} />
         </View>
     );
 });
@@ -294,6 +317,7 @@ const LoadingCarousel = React.memo(({ isRefreshing, loadingProgress }) => {
             animationType="fade"
             visible={isRefreshing}
             onRequestClose={() => {}}
+            hardwareAccelerated={Platform.OS === 'android'}
         >
             <View style={styles.loadingOverlay}>
                 <View style={styles.loadingCard}>
@@ -391,11 +415,17 @@ const Rolls = () => {
         setLoadingProgress(0);
         let progress = 0;
         
+        if (progressInterval.current) {
+            clearInterval(progressInterval.current);
+        }
+        
         progressInterval.current = setInterval(() => {
             progress += Math.random() * 15;
             if (progress > 90) {
                 progress = 90;
-                clearInterval(progressInterval.current);
+                if (progressInterval.current) {
+                    clearInterval(progressInterval.current);
+                }
             }
             if (isMounted.current) {
                 setLoadingProgress(Math.min(progress, 90));
@@ -406,6 +436,7 @@ const Rolls = () => {
     const completeProgress = useCallback(() => {
         if (progressInterval.current) {
             clearInterval(progressInterval.current);
+            progressInterval.current = null;
         }
         if (isMounted.current) {
             setLoadingProgress(100);
@@ -418,7 +449,7 @@ const Rolls = () => {
         }
     }, []);
 
-    // Загрузка продуктов (с группировкой ОДИН раз)
+    // Загрузка продуктов
     const loadProducts = useCallback(async () => {
         if (!isMounted.current) return;
         
@@ -431,11 +462,15 @@ const Rolls = () => {
             
             if (!isMounted.current) return;
             
-            // Группируем данные в фоне
+            // Группируем данные асинхронно для Android
             const groupedData = await new Promise((resolve) => {
-                setTimeout(() => {
+                if (Platform.OS === 'android') {
+                    requestAnimationFrame(() => {
+                        resolve(groupProducts(data));
+                    });
+                } else {
                     resolve(groupProducts(data));
-                }, 0);
+                }
             });
             
             if (!isMounted.current) return;
@@ -444,21 +479,26 @@ const Rolls = () => {
             setSections(groupedData);
             completeProgress();
         } catch (error) {
+            console.error('Error loading products:', error);
             if (isMounted.current) {
                 completeProgress();
-                setError(error.message);
+                setError(error.message || 'Ошибка загрузки данных');
             }
         }
     }, [startProgressSimulation, completeProgress]);
 
-    // Загрузка при монтировании (отложенная)
+    // Загрузка при монтировании
     useEffect(() => {
         const task = InteractionManager.runAfterInteractions(() => {
             loadProducts();
         });
         
-        return () => task.cancel();
-    }, []);
+        return () => {
+            if (task && typeof task.cancel === 'function') {
+                task.cancel();
+            }
+        };
+    }, [loadProducts]);
 
     // Мемоизированные секции с учетом поиска
     const filteredSections = useMemo(() => {
@@ -481,27 +521,40 @@ const Rolls = () => {
         return count;
     }, [filteredSections, searchQuery]);
 
-    // Переключение организации
+    // Переключение организации с учетом платформы
     const toggleOrganization = useCallback((orgName) => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setCollapsedOrganizations(prev => ({
-            ...prev,
-            [orgName]: !prev[orgName]
-        }));
+        if (Platform.OS === 'android') {
+            setCollapsedOrganizations(prev => ({
+                ...prev,
+                [orgName]: !prev[orgName]
+            }));
+        } else {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setCollapsedOrganizations(prev => ({
+                ...prev,
+                [orgName]: !prev[orgName]
+            }));
+        }
     }, []);
 
-    // Переключение производителя
+    // Переключение производителя с учетом платформы
     const toggleManufacturer = useCallback((manufacturerKey) => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setCollapsedManufacturers(prev => ({
-            ...prev,
-            [manufacturerKey]: !prev[manufacturerKey]
-        }));
+        if (Platform.OS === 'android') {
+            setCollapsedManufacturers(prev => ({
+                ...prev,
+                [manufacturerKey]: !prev[manufacturerKey]
+            }));
+        } else {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setCollapsedManufacturers(prev => ({
+                ...prev,
+                [manufacturerKey]: !prev[manufacturerKey]
+            }));
+        }
     }, []);
 
     // Свернуть все
     const collapseAll = useCallback(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         const currentSections = allSectionsRef.current;
         const newCollapsedOrgs = {};
         const newCollapsedManuf = {};
@@ -514,15 +567,26 @@ const Rolls = () => {
             }
         }
         
-        setCollapsedOrganizations(newCollapsedOrgs);
-        setCollapsedManufacturers(newCollapsedManuf);
+        if (Platform.OS === 'android') {
+            setCollapsedOrganizations(newCollapsedOrgs);
+            setCollapsedManufacturers(newCollapsedManuf);
+        } else {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setCollapsedOrganizations(newCollapsedOrgs);
+            setCollapsedManufacturers(newCollapsedManuf);
+        }
     }, []);
 
     // Развернуть все
     const expandAll = useCallback(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setCollapsedOrganizations({});
-        setCollapsedManufacturers({});
+        if (Platform.OS === 'android') {
+            setCollapsedOrganizations({});
+            setCollapsedManufacturers({});
+        } else {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setCollapsedOrganizations({});
+            setCollapsedManufacturers({});
+        }
     }, []);
 
     // Очистка поиска
@@ -618,9 +682,14 @@ const Rolls = () => {
         );
     }, [collapsedOrganizations, toggleOrganization]);
 
-    // Оптимизированный keyExtractor
+    // keyExtractor
     const keyExtractor = useCallback((item, index) => {
         return `${item.type}_${item.title}_${index}`;
+    }, []);
+
+    // getItemLayout для оптимизации на Android
+    const getItemLayout = useCallback((data, index) => {
+        return { length: 100, offset: 100 * index, index };
     }, []);
 
     return (
@@ -642,12 +711,14 @@ const Rolls = () => {
             <KeyboardAvoidingView 
                 style={styles.keyboardAvoidingContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 <SectionList
                     sections={filteredSections}
                     renderItem={renderSectionItem}
                     renderSectionHeader={renderSectionHeader}
                     keyExtractor={keyExtractor}
+                    getItemLayout={Platform.OS === 'android' ? getItemLayout : undefined}
                     ListHeaderComponent={
                         <>
                             <Text style={styles.heading}>Список рулонов</Text>
@@ -690,16 +761,21 @@ const Rolls = () => {
                     stickySectionHeadersEnabled={true}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
-                    initialNumToRender={5}
-                    maxToRenderPerBatch={3}
-                    windowSize={5}
-                    removeClippedSubviews={true}
+                    initialNumToRender={Platform.OS === 'android' ? 3 : 5}
+                    maxToRenderPerBatch={Platform.OS === 'android' ? 2 : 3}
+                    windowSize={Platform.OS === 'android' ? 3 : 5}
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    disableVirtualization={false}
+                    onEndReachedThreshold={0.5}
+                    maintainVisibleContentPosition={{
+                        minIndexForVisible: 0,
+                    }}
                 />
 
                 <View style={[
                     styles.searchContainer, 
                     isSearchFocused && styles.searchContainerFocused,
-                    keyboardHeight > 0 && { paddingBottom: 10, marginBottom: 0 }
+                    keyboardHeight > 0 && { paddingBottom: Platform.OS === 'ios' ? 10 : 5, marginBottom: 0 }
                 ]}>
                     <View style={styles.searchInputWrapper}>
                         <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
@@ -715,6 +791,7 @@ const Rolls = () => {
                             autoCorrect={false}
                             clearButtonMode="while-editing"
                             returnKeyType="search"
+                            returnKeyLabel="Поиск"
                         />
                         {searchQuery.length > 0 && (
                             <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
@@ -753,21 +830,21 @@ const Rolls = () => {
     );
 };
 
-// ============ СТИЛИ (без изменений) ============
+// ============ СТИЛИ ============
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
-        marginTop: 30
+        marginTop: Platform.OS === 'android' ? 25 : 30
     },
     keyboardAvoidingContainer: {
         flex: 1,
     },
     refreshButton: {
         position: 'absolute',
-        top: 20,
-        left: 20,
+        top: Platform.OS === 'android' ? 10 : 20,
+        left: Platform.OS === 'android' ? 10 : 20,
         zIndex: 1000,
         backgroundColor: '#3498db',
         width: 44,
